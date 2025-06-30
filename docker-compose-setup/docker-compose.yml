@@ -1,0 +1,81 @@
+services:
+  # Nextcloud service
+  nextcloud:
+    image: nextcloud:latest
+    container_name: nextcloud
+    environment:
+      - PUID=1000 # Update with your user ID
+      - PGID=1000 # Update with your group ID
+      - POSTGRES_HOST=postgresh # PostgreSQL hostname
+      - POSTGRES_DB=${POSTGRES_DB} # Database name for Nextcloud
+      - POSTGRES_USER=${POSTGRES_USER} # Database user for Nextcloud
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD} # Database password for Nextcloud
+      - NEXTCLOUD_TRUSTED_DOMAINS=${NEXTCLOUD_TRUSTED_DOMAINS} # Trusted domains
+#      - OVERWRITEPROTOCOL=https # Ensure Nextcloud uses HTTPS
+#      - OVERWRITEHOST=${CLOUDFLARE_DOMAIN} # Ensure requests match your Cloudflare domain
+      - NEXTCLOUD_ADMIN_USER=${NEXTCLOUD_ADMIN_USER} # Admin username
+      - NEXTCLOUD_ADMIN_PASSWORD=${NEXTCLOUD_ADMIN_PASSWORD} # Admin password
+      - NEXTCLOUD_MEMORY_LIMIT=1024M
+    volumes:
+      - nextcloud_vol:/var/www/html/
+    ports:
+#      - 443:443 # Enable to Expose Nextcloud on HTTPS port
+      - 8080:80
+    depends_on:
+      - postgresh
+    restart: unless-stopped
+    networks:
+      - nextcloud_network
+
+
+  # PostgreSQL database for Nextcloud
+  postgresh:
+    image: postgres
+    container_name: postgres
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB} # Database name
+      - POSTGRES_USER=${POSTGRES_USER} # Database user
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD} # Database password
+    volumes:
+      - ${NEXTCLOUD_INSTALL_DIR}psql:/var/lib/postgresql/data # Path to PostgreSQL data
+    networks:
+      - nextcloud_network
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+  
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    command: tunnel run --token ${CLOUDFLARE_TOKEN}
+    networks:
+      - nextcloud_network
+    
+  
+  cron:
+    container_name: nextcron
+    depends_on:
+      - postgresh
+      - nextcloud
+    image: nextcloud:latest
+    restart: unless-stopped
+    entrypoint: /cron.sh
+    volumes:
+      - nextcloud_vol:/var/www/html
+       # read_only: false
+    networks:
+      - nextcloud_network
+
+
+volumes:
+  nextcloud_vol:
+    driver: local
+    driver_opts:
+      type: none
+      device: ${NEXTCLOUD_INSTALL_DIR}data
+      o: bind
+
+networks:
+  nextcloud_network:
+    driver: bridge
