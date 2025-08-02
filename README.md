@@ -10,6 +10,7 @@ Main Repository
 The Docker-Compose.yml is an all in one Setup file for this work enviroment.
 It is important to setup an .env file for the envoirement credentials & settings.
 <br>_See files in `docker-compose-setup`_
+<br>Install from folder with `docker compose up -d`
 
 It includes a Nextcloud installation which is published via a cloudflare tunnel.
 The Nextcloud Database is PSQL and can be accessed via ssh/5432.
