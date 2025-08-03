@@ -1,1 +1,3 @@
 py-code/.env
+.venv
+image_cache
