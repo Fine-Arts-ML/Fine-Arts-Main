@@ -1,3 +1,6 @@
 py-code/.env
 .venv
+.venv3_12
 image_cache
+triton
+vllm
