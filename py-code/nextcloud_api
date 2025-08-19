@@ -1,0 +1,20 @@
+import nc_py_api
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+nc_user = os.getenv("NC_ACC")
+nc_pass = os.getenv("NC_PASS")
+
+
+
+def find_files():
+    # create Nextcloud client instance class
+    nc = nc_py_api.Nextcloud(nextcloud_url="http://192.168.0.159:8080", nc_auth_user=str(nc_user), nc_auth_pass=str(nc_pass))
+
+    print("Searching for all files which names ends with `.txt`:")
+    result = nc.files.find(["like", "name", "%.md"])
+    for i in result:
+        print(i)
+
+    exit(0)
