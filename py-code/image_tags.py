@@ -10,22 +10,11 @@ from IPython.display import display
 import sys
 import pandas as pd
 import os
+from tqdm import tqdm
 PIL.Image.MAX_IMAGE_PIXELS = 933120000
-load_dotenv()
-cache_dir = os.getenv("CACHE_DIR")
-working_dir = os.getcwd()
 
-full_path = os.path.realpath(cache_dir)
-image_cache_list = os.listdir(full_path)
-image_list = []
-for pic in image_cache_list:
-    pic_path = os.path.join(cache_dir, pic)
-    image_list.append(pic_path)
-image_list = image_list[:10]  # Limit to first 10 images for testing
-
-def get_tags_from_cache(image_list,model_id,prompt):
-    tags=[]
-    
+def get_tags_from_cache(df,model_id,prompt):
+    df_tags = pd.DataFrame(columns=['tags'])
     if model_id == "LFM2":
         from transformers import AutoProcessor, AutoModelForImageTextToText
         from transformers.image_utils import load_image
@@ -37,14 +26,30 @@ def get_tags_from_cache(image_list,model_id,prompt):
             torch_dtype="bfloat16",
             trust_remote_code=True)
 
-    avg_time = []
+    if model_id == "Pixtral_transformer":
+        from transformers import AutoProcessor, LlavaForConditionalGeneration
+        from transformers import pipeline
+        print("Using Pixtral model for tag generation")
+        model_id = "mistral-community/pixtral-12b"
+        model = LlavaForConditionalGeneration.from_pretrained(model_id)
+        processor = AutoProcessor.from_pretrained(model_id)
+
+    if model_id == "Mistral_mlx":
+        import mlx.core as mx
+        from mlx_vlm import load, generate
+        from mlx_vlm.prompt_utils import apply_chat_template
+        from mlx_vlm.utils import load_config
+        model_path = "mlx-community/pixtral-12b-bf16"
+        model, processor = load(model_path)
+        config = load_config(model_path)
+
+
     i = 0
-    for image_url in image_list:
+    for image_url in tqdm(df['local_path']):
         image = Im.open(image_url)
         image = ImageOps.contain(image, (1024,1024))
-        start_time = time.time()
-        i += 1
-        print(f"Processing image {i} of {len(image_list)}")
+        
+        #print(f"Processing image {i} of {len(image_list)}")
         if model_id == "LFM2":
             processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True)
             conversation = [
@@ -67,20 +72,29 @@ def get_tags_from_cache(image_list,model_id,prompt):
             ).to("mps")
             outputs = model.generate(**inputs, max_new_tokens=64)
             full_outputs = processor.batch_decode(outputs, skip_special_tokens=True)
-            print(f"Output: {full_outputs[0][len(prompt)+16:]}")
-            tags.append(full_outputs[0][len(prompt)+16:])
+            print(f"Output: {full_outputs}")
+            df.at[df.index[i], 'tags'] = full_outputs[0][len(prompt)+16:]
+        
+        if model_id == "mistral-community/pixtral-12b":
+            PROMPT = f'''<s>[INST]{prompt}\n [IMG] [/INST]'''
+            inputs = processor(text=PROMPT, images=image, return_tensors="pt").to("cpu")
+            generate_ids = model.generate(**inputs, max_new_tokens=64)
+            output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+            print(output)
+            df.at[df.index[i], 'tags'] = output[len(prompt)+1:]
+            
+        if model_id == "Mistral_mlx":
+            PROMPT = prompt
+            formatted_prompt = apply_chat_template(processor, config, PROMPT, num_images=1)
+            output = generate(model, processor, formatted_prompt, image, verbose=False)
+            print(output.text)
+            df.at[df.index[i], 'tags'] = output.text
 
-        else:
+        elif model_id is None:
             print("No model selected, exiting.")
             sys.exit(1)
+        i += 1
 
-        endtime = time.time()
-        this_run_time = endtime - start_time
-        avg_time.append(this_run_time)
-        print(f"Time taken for iteration {i}: {this_run_time:.2f} seconds")
-        print(' - ' * 50)
-    df_tags = pd.DataFrame({'image': image_list, 'tags': tags})
-    df_tags.to_csv('./image_tags.csv', index=False)
-    return df_tags
-
-get_tags_from_cache(image_list, "LFM2", "Generate tags for this image: ")
+    #df_tags = pd.DataFrame({'image': image_list, 'tags': tags})
+    df_tags.to_csv('./image_tags.csv', index=False, sep=',')
+    return df

@@ -6,9 +6,7 @@
             "type": "debugpy",
             "request": "launch",
             "program": "${file}",
-            "env": {
-                "PYTHONPATH": "${./.venv3_12}"
-            },
+
             
         }
     ]
