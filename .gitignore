@@ -1,10 +1,5 @@
 *.env
 .venv*
 image_cache
-py-code/__pycache__/image_tags.cpython-312.pyc
 .gitignore
-py-code/__pycache__/psql_handler.cpython-312.pyc
-py-code/__pycache__/psql_handler.cpython-313.pyc
-py-code/__pycache__/image_tags.cpython-313.pyc
-py-code/__pycache__/psql_handler.cpython-313.pyc
-py-code/__pycache__/psql_handler.cpython-313.pyc
+py-code/__pycache__/.*
