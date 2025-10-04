@@ -1,10 +1,13 @@
-# Fine-Arts-Main
-Main Repository 
+# Fine-Arts-Webdav
+Webdav Repository
+- Aim is to get a clean API connection for file download, no more bruteforce
+
 
 
 ## Postrges - Where to Find What Data
 - File Locations are availible in Table `oc_filechache` in column `path`
-
+- File tags are availible in Table `oc_systemtag`
+- File tag mappings are availible in Table `oc_systemtag_object_mapping`
 
 ## Cloud - Docker env setup
 The Docker-Compose.yml is an all in one Setup file for this work enviroment.
