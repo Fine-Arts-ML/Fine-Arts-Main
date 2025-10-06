@@ -6,8 +6,8 @@ Webdav Repository
     - files metadata is downloaded in a dictionary and saved in a json for testing purposes
     - all folder and file data download is done in +-6 minutes
     - for now its missing tag upload to cloud
-    - json/dict format example: ```json
-    {
+    - json/dict format example: 
+    ```json
                 "AI_art/": {
                 "bearbeitet/": {
                     "1265.jpg": {
@@ -16,8 +16,14 @@ Webdav Repository
                         "fileid": "195",
                         "tags": null,
                         "path": "/path/to/file/1265.jpg"
-                    },}}
-    }
+                    },
+                    "etc/":"12.jpg": {
+                        "name": "12.jpg",
+                        "id": "000115s6w8qwy7q",
+                        "fileid": "95",
+                        "tags": null,
+                        "path": "/path/to/file/12.jpg"}
+                    }}
     ```
 
 
