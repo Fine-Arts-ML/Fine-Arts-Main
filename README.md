@@ -1,6 +1,24 @@
 # Fine-Arts-Webdav
 Webdav Repository
 - Aim is to get a clean API connection for file download, no more bruteforce
+- File and metadata download test succesfull
+    - files wont be written to disk anymore and are kept in ram
+    - files metadata is downloaded in a dictionary and saved in a json for testing purposes
+    - all folder and file data download is done in +-6 minutes
+    - for now its missing tag upload to cloud
+    - json/dict format example: ```json
+    {
+                "AI_art/": {
+                "bearbeitet/": {
+                    "1265.jpg": {
+                        "name": "1265.jpg",
+                        "id": "00019515s6w8qwy7q",
+                        "fileid": "195",
+                        "tags": null,
+                        "path": "/path/to/file/1265.jpg"
+                    },}}
+    }
+    ```
 
 
 
