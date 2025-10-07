@@ -16,6 +16,8 @@ services:
       - NEXTCLOUD_ADMIN_USER=${NEXTCLOUD_ADMIN_USER} # Admin username
       - NEXTCLOUD_ADMIN_PASSWORD=${NEXTCLOUD_ADMIN_PASSWORD} # Admin password
       - NEXTCLOUD_MEMORY_LIMIT=1024M
+      - PHP_MEMORY_LIMIT=1024M
+      - PHP_UPLOAD_LIMIT=1024M
     volumes:
       - nextcloud_vol:/var/www/html/
     ports:
