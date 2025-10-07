@@ -6,6 +6,7 @@ Webdav Repository
     - files metadata is downloaded in a dictionary and saved in a json for testing purposes
     - all folder info and file metadata download is done in +-6 minutes
     - for now its missing tag upload to cloud
+    - since most files now do have a thumbnail, it might be worth getting those, instead of the big source files
     - json/dict format example: 
     ```json
                 "AI_art/": {
