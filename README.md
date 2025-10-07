@@ -4,7 +4,7 @@ Webdav Repository
 - File and metadata download test succesfull
     - files wont be written to disk anymore and are kept in ram
     - files metadata is downloaded in a dictionary and saved in a json for testing purposes
-    - all folder and file data download is done in +-6 minutes
+    - all folder info and file metadata download is done in +-6 minutes
     - for now its missing tag upload to cloud
     - json/dict format example: 
     ```json
