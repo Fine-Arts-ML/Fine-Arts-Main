@@ -32,15 +32,16 @@ services:
 
   # PostgreSQL database for Nextcloud
   postgresh:
-    image: postgres
+    image: postgres:17
     container_name: postgres
     environment:
       - POSTGRES_DB=${POSTGRES_DB} # Database name
       - POSTGRES_USER=${POSTGRES_USER} # Database user
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD} # Database password
     volumes:
-    ##### CHECK THE CURRENT POSTGRES VERSION AND UPDATE THE PATH ACCORDINGLY #####
-      - ${NEXTCLOUD_INSTALL_DIR}psql:/var/lib/postgresql/18/data # Path to PostgreSQL data
+    ##### CHECK THE CURRENT POSTGRES VERSION AND UPDATE THE PATH ACCORDINGLY IF POSTGRESQL > v.17#####
+    ##### F.E. /var/lib/postgresql/data --> /var/lib/postgresql/18/data
+      - ${NEXTCLOUD_INSTALL_DIR}psql:/var/lib/postgresql/data # Path to PostgreSQL data
     networks:
       - nextcloud_network
     ports:
