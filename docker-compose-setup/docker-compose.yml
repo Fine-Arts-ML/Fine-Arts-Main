@@ -16,6 +16,8 @@ services:
       - NEXTCLOUD_ADMIN_USER=${NEXTCLOUD_ADMIN_USER} # Admin username
       - NEXTCLOUD_ADMIN_PASSWORD=${NEXTCLOUD_ADMIN_PASSWORD} # Admin password
       - NEXTCLOUD_MEMORY_LIMIT=1024M
+      - PHP_MEMORY_LIMIT=1024M
+      - PHP_UPLOAD_LIMIT=1024M
     volumes:
       - nextcloud_vol:/var/www/html/
     ports:
@@ -30,13 +32,15 @@ services:
 
   # PostgreSQL database for Nextcloud
   postgresh:
-    image: postgres
+    image: postgres:17 #### Has to be PSQL v17 , newer versions arent currently supported by NC! (Oct.2025)
     container_name: postgres
     environment:
       - POSTGRES_DB=${POSTGRES_DB} # Database name
       - POSTGRES_USER=${POSTGRES_USER} # Database user
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD} # Database password
     volumes:
+    ##### CHECK THE CURRENT POSTGRES VERSION AND UPDATE THE PATH ACCORDINGLY IF POSTGRESQL > v.17#####
+    ##### F.E. /var/lib/postgresql/data --> /var/lib/postgresql/18/data
       - ${NEXTCLOUD_INSTALL_DIR}psql:/var/lib/postgresql/data # Path to PostgreSQL data
     networks:
       - nextcloud_network

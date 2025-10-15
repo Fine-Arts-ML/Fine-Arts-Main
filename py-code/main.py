@@ -1,94 +1,81 @@
 import sys
 import psql_handler
-from image_tags import get_tags_from_cache
-from psql_handler import create_db_connection
-import os 
+import image_tags
+from webdav_handler import webdav_login, folder_to_dict_w_meta_tqdm, get_images
+import os
 from dotenv import load_dotenv
-from multiprocessing import Pool
-import pandas as pd
+import gc
+import json
+from tqdm import tqdm
 
 load_dotenv()
 cache_dir = os.getenv("CACHE_DIR")
-###Choose model###
-#model_id = "LFM2"
-#model_id = "Pixtral_transformer"
-model_id = "Mistral_mlx"
+
+### MLX needs to be restarted after Max 10 runs, adjust if necessary ###
+max_mlx_run = 10
+batch_size = 20  # Number of prompts to process before inserting into the database
+
 #####################
+DB_HOST = os.getenv("DB_HOST")
+NC_ACC = os.getenv("NC_ACC")
+NC_PASS = os.getenv("NC_PASS")
 
 def main():
-    engine = psql_handler.create_db_connection()
-    if engine is None:
-        print("Failed to connect to the database.")
-        sys.exit(1)
-    # Define query parameters
-    SELECT = "storage, fileid, path, path_hash, name, etag "
-    FROM = "public.oc_filecache"
-    LIKE = "'files/%' and (path LIKE '%.JPG' OR path LIKE '%.jpg') and storage = 1"
-    ORDER = "fileid"
-    LIMIT = 150
-   
-   
-    # Get file locations
-    df_file_loc = psql_handler.get_file_locs(engine, SELECT, FROM, LIKE, ORDER, str(LIMIT))
-    #get already tagged files
-    df_file_w_tag = psql_handler.get_allready_tag_fileid(engine)
-    #filter out already tagged files
-    df_file_loc = df_file_loc[~df_file_loc['fileid'].isin(df_file_w_tag['objectid'])]
+    server_url = f'http://{DB_HOST}:8080/remote.php/dav/files/{NC_ACC}'
+    username = NC_ACC
+    password = NC_PASS
+    path = "/Bre/Artwork/"
 
+    client = webdav_login(server_url, username, password)
+    if client:
+        print("Client connected")
+        root_dict = {path.strip("/").split("/")[-1]: folder_to_dict_w_meta_tqdm(path, client, server_url)}
+        open("./webdav_meta.json", "w").write(json.dumps(root_dict, indent=4))
+    else:
+        print('Could not connect to WebDav. Check your .env file!')
+        sys.exit(10)
 
+    data_list = image_tags.flatten_dict_to_list(root_dict)
+    print(f'Found {len(data_list)} files in storage')
 
-    # Get files from the dataframe
-    df_file_loc = psql_handler.get_files(df_file_loc)
-    print(F"Copied {len(df_file_loc)} files to {cache_dir}")
+    # Get tagged file IDs from the database
+    tagged_file_ids = psql_handler.get_file_ids_of_tagged_images()
 
-    df_new_tags = get_tags_from_cache(df_file_loc, model_id, " Generate Tags for image, no other text. Return seperated like: tag1;tag2;tag3. Max 10 tags. only use lemmatized words.")
- 
-    df_file_loc.to_csv((cache_dir + "/db.csv"))
-   
-    tags = df_new_tags['tags']
-    # Split the tags into separate rows
-    tags_expanded = tags.str.split(';').explode().str.strip().replace('"', '', regex=True)
-    tags_expanded = tags_expanded[tags_expanded != '']
-    tags_expanded = tags_expanded.drop_duplicates()
-    tags_expanded = tags_expanded.str.lower()
-    tags_expanded = tags_expanded.reset_index(drop=True)
-    tags = tags_expanded.to_frame(name='name')
-    tags.to_csv(((cache_dir + '/tags.csv')), index=False)
-   
-    psql_handler.write_tags_to_db(tags, engine)
+    # Filter out already tagged images
+    data_list = image_tags.filter_untagged_images(data_list, tagged_file_ids)
 
-    # Map tags to fileids
-    psql_handler.upload_new_obj_map(engine, tags, df_file_loc)
+    print(f'Found {len(data_list)} files to process')
 
+    prompt = "Generate Tags for the image, for selling it in artsy online stores, no other text. Return separated like: tag1;tag2;tag3. Max 15 tags. Only use lemmatized words. Always include Art-style and color composition."
 
+    run_count = 1
+    gc.collect()
+    model, processor, config = image_tags.load_model_mlx()
 
+    for i in tqdm(range(0, len(data_list), batch_size)):
+        batch = data_list[i:i + batch_size]
 
-    # Get files from the dataframe
-    df_file_loc = psql_handler.get_files(df_file_loc)
-    print(F"Copied {len(df_file_loc)} files to {cache_dir}")
+        for item in batch:
+            if run_count > max_mlx_run:
+                print('Restarting MLX')
+                del model, processor, config
+                gc.collect()
+                run_count = 1
+                model, processor, config = image_tags.load_model_mlx()
 
-    df_new_tags = get_tags_from_cache(df_file_loc, model_id, " Generate Tags for image, no other text. Return seperated like: tag1;tag2;tag3. Max 10 tags. only use lemmatized words.")
+            img = get_images(item['fileid'], item['path'])
+            item['tags'] = image_tags.mlx_tags(img, prompt, model, processor, config)
+            run_count += 1
 
-    df_file_loc.to_csv((cache_dir + "/db.csv"))
+        # Insert tags for the current batch into the database
+        psql_handler.insert_tags_and_assign_to_files(batch)
+        print(f'Inserted tags for batch {i//batch_size + 1}')
 
-    tags = df_new_tags['tags']
-    # Split the tags into separate rows
-    tags_expanded = tags.str.split(';').explode().str.strip().replace('"', '', regex=True)
-    tags_expanded = tags_expanded[tags_expanded != '']
-    tags_expanded = tags_expanded.drop_duplicates()
-    tags_expanded = tags_expanded.str.lower()
-    tags_expanded = tags_expanded.reset_index(drop=True)
-    tags = tags_expanded.to_frame(name='name')
-    tags.to_csv(((cache_dir + '/tags.csv')), index=False)
-
-    psql_handler.write_tags_to_db(tags, engine)
-
-    # Map tags to fileids
-    psql_handler.upload_new_obj_map(engine, tags, df_file_loc)
-
-    psql_handler.cleanup_cache(cache_dir)
-
-
+    # Insert any remaining items that didn't make up a full batch
+    if len(data_list) % batch_size != 0:
+        remaining_items = data_list[(len(data_list) // batch_size) * batch_size:]
+        psql_handler.insert_tags_and_assign_to_files(remaining_items)
+        print('Inserted tags for remaining items')
 
 if __name__ == "__main__":
     main()
