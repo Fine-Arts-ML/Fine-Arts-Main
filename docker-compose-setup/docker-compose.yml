@@ -32,7 +32,7 @@ services:
 
   # PostgreSQL database for Nextcloud
   postgresh:
-    image: postgres:17
+    image: postgres:17 #### Has to be PSQL v17 , newer versions arent currently supported by NC! (Oct.2025)
     container_name: postgres
     environment:
       - POSTGRES_DB=${POSTGRES_DB} # Database name
