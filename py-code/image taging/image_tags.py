@@ -47,6 +47,8 @@ def flatten_dict_to_list(data):
 def filter_untagged_images(data_list, tagged_file_ids):
     # Filter out images that are already tagged
     untagged_images = [image for image in data_list if image['fileid'] not in tagged_file_ids]
+    if len(untagged_images) == 0:
+        print("No (new) files to tag")
     return untagged_images
 
 def load_model_mlx():
@@ -58,6 +60,7 @@ def load_model_mlx():
 def mlx_tags(image, prompt ,model,processor,config):
     formatted_prompt = apply_chat_template(processor, config, prompt, num_images=1)
     output = generate(model, processor, formatted_prompt, image, verbose=False)
+    output_text = output.text.lower()
     #print(output.text)
     #print( 'Generator token count:', output.generation_tokens , ' Generator tokens per second:', output.generation_tps)
-    return output.text
+    return output_text
