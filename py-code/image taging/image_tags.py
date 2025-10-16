@@ -47,6 +47,8 @@ def flatten_dict_to_list(data):
 def filter_untagged_images(data_list, tagged_file_ids):
     # Filter out images that are already tagged
     untagged_images = [image for image in data_list if image['fileid'] not in tagged_file_ids]
+    if len(untagged_images) == 0:
+        print("No (new) files to tag")
     return untagged_images
 
 def load_model_mlx():

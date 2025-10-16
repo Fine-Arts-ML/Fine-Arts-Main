@@ -43,8 +43,8 @@ def main():
 
     # Filter out already tagged images
     data_list = image_tags.filter_untagged_images(data_list, tagged_file_ids)
-
-    print(f'Found {len(data_list)} files to process')
+    if len(data_list) != 0:
+        print(f'Found {len(data_list)} files to process')
 
     prompt = "Generate Tags for the image, for selling it in artsy online stores, no other text. Return separated like: tag1;tag2;tag3. Max 15 tags. Only use lemmatized words. Always include Art-style and color composition."
 

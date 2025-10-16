@@ -1,26 +1,15 @@
-# Fine Arts - Read me
-most recent project steps are on top of README.md
-### Data cleaning
-- Since the initial taging process of the DB is finished, the tags now need to be cleaned.
-    - Lemmatized
-    - Similarity checked
-    - clustered
-    - ??
-- this will most likely work best with direct interference w/ the psql backend of nextcloud.
-- most important tables for this step are:
-    - `oc_systemtag`
-    - `oc_systemtag_object_mapping`
-
-
-### Fine-Arts-Webdav
+# Fine-Arts-Webdav
+## Image taging
 Webdav Repository
-- Aim is to get a clean API connection for file download, no more bruteforce
-- File and metadata download test succesfull
+- This Solution has clean(er) API connection for file download, no more bruteforce
+- File and metadata download succesfull
     - files wont be written to disk anymore and are kept in ram
     - files metadata is downloaded in a dictionary and saved in a json for testing purposes
-    - all folder info and file metadata download is done in +-6 minutes
-    - for now its missing tag upload to cloud
-    - since most files now do have a thumbnail, it might be worth getting those, instead of the big source files <br>
+        - for some reason the propfind ```<oc:tags>``` still returns no values
+        - therefore exiting tags have to be managed via direct psql access
+            - same goes for tag upload & mapping, can't use webDAV. currently works only with psql
+    - all folder info and file metadata download is done in +-6 minutes (1500 files)
+    - since most files now do have a preview, it might be worth getting those, instead of the big source files <br>
         - like this ``` GET: https://cloud.yourserver.org/core/preview?fileId=11750924&x=250&y=250 ``` 
     - json/dict format example: 
     ```json
@@ -41,7 +30,7 @@ Webdav Repository
                         "path": "/path/to/file/12.jpg"}
                     }}
     ```
-
+ - this info also goes for the same folder in /ipynb-test-bench/image taging
 
 
 ## Postrges - Where to Find What Data
