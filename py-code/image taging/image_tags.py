@@ -60,6 +60,7 @@ def load_model_mlx():
 def mlx_tags(image, prompt ,model,processor,config):
     formatted_prompt = apply_chat_template(processor, config, prompt, num_images=1)
     output = generate(model, processor, formatted_prompt, image, verbose=False)
+    output_text = output.text.lower()
     #print(output.text)
     #print( 'Generator token count:', output.generation_tokens , ' Generator tokens per second:', output.generation_tps)
-    return output.text
+    return output_text
