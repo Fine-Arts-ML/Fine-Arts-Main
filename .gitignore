@@ -3,4 +3,4 @@
 image_cache
 .gitignore
 ipynb-code/webdav_meta.json
-.*__pycache__/.*
+py-code/image taging/__pycache__/*
