@@ -13,7 +13,7 @@ cache_dir = os.getenv("CACHE_DIR")
 
 ### MLX needs to be restarted after Max 10 runs, adjust if necessary ###
 max_mlx_run = 10
-batch_size = 20  # Number of prompts to process before inserting into the database
+batch_size = 1  # Number of prompts to process before inserting into the database
 
 #####################
 DB_HOST = os.getenv("DB_HOST")
