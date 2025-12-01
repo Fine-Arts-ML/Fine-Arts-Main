@@ -9,10 +9,30 @@ import subprocess
 import os
 from tqdm import tqdm
 import uniqid
-
+import regex as re
+import spacy
+from nltk.metrics import distance
+import scipy.spatial as spatial
+import numpy as np
+from scipy.cluster.vq import kmeans
+nlp = spacy.load("en_core_web_trf")
 load_dotenv()
 
-
+def lemmatize_tags(tags_list):
+    def lemmatize_list(list):
+        lemma_list = []
+        for word in list:
+            doc = nlp(word)
+            lemma_list.append(" ".join([token.lemma_ for token in doc]))
+        return lemma_list
+    df_tags = pd.DataFrame(tags_list, columns=['name'])
+    df_tags["split_n"] = df_tags.name.apply(lambda x: re.sub('[^A-Za-z0-9]+', ' ', x))
+    df_tags["split_n"] = df_tags.split_n.str.split()
+    df_tags["split_n_lem"] = df_tags.split_n.apply(lemmatize_list)
+    df_tags['lem_combined'] = df_tags['split_n_lem'].apply(lambda x: ' '.join(x))
+    tags_lem_list = df_tags['lem_combined'].unique().tolist()
+    tags_lem_list
+    return tags_lem_list
 
 def create_db_connection():
     DB_HOST = os.getenv("DB_HOST")
@@ -38,7 +58,9 @@ def insert_tags_and_assign_to_files(file_list):
             for file_info in tqdm(file_list):
                 file_id = file_info['fileid']
                 tags_str = file_info['tags']
-                tags = [tag.strip() for tag in tags_str.split(';')]
+                tags = [tag.strip().lower() for tag in tags_str.split(';')]
+                tags = lemmatize_tags(tags)
+
 
                 # Step 1: Insert tags into oc_systemtag and collect tag_ids
                 tag_ids = []
