@@ -12,11 +12,38 @@ import uniqid
 import regex as re
 import spacy
 from nltk.metrics import distance
-import scipy.spatial as spatial
+from nltk.corpus import stopwords
 import numpy as np
-from scipy.cluster.vq import kmeans
-nlp = spacy.load("en_core_web_trf")
-load_dotenv()
+from time import sleep
+
+try:
+    nlp = spacy.load("en_core_web_trf")
+except:
+    print('failed to load spacy lemmatizer')
+    print('stopping execution')
+    sleep(10)
+try:
+    stop_words = set(stopwords.words('english'))
+    stop_words.update(['art','color','colorcomposition'])
+except:
+    print('failed to load nltk stopwords')
+    print('stopping execution')
+    sleep(10)
+try:
+    with open('costum_stopwords.txt', 'r') as f:
+        costum_stopwords = f.read().splitlines()
+        stop_words.update(costum_stopwords)
+except:
+    print('failed to load costum stopwords')
+    print('stopping execution')
+    sleep(10)
+
+try:
+    load_dotenv()
+except:
+    print('failed to load Variables from .env')
+    print('stopping execution')
+    sleep(10)
 
 def lemmatize_tags(tags_list):
     def lemmatize_list(list):
@@ -24,14 +51,15 @@ def lemmatize_tags(tags_list):
         for word in list:
             doc = nlp(word)
             lemma_list.append(" ".join([token.lemma_ for token in doc]))
-        return lemma_list
+        no_stop_lemmas = [word for word in lemma_list if word not in stop_words]
+        return no_stop_lemmas
     df_tags = pd.DataFrame(tags_list, columns=['name'])
     df_tags["split_n"] = df_tags.name.apply(lambda x: re.sub('[^A-Za-z0-9]+', ' ', x))
     df_tags["split_n"] = df_tags.split_n.str.split()
     df_tags["split_n_lem"] = df_tags.split_n.apply(lemmatize_list)
-    df_tags['lem_combined'] = df_tags['split_n_lem'].apply(lambda x: ' '.join(x))
-    tags_lem_list = df_tags['lem_combined'].unique().tolist()
-    tags_lem_list
+    df_tags = df_tags.explode('split_n_lem')
+    df_splitnlem = df_tags.split_n_lem.dropna()
+    tags_lem_list = df_splitnlem.unique().tolist()
     return tags_lem_list
 
 def create_db_connection():
