@@ -108,39 +108,33 @@ def folder_to_dict_w_meta(path, client, server_url):
             children[entry] = {"name": entry, "id": id, "fileid": fileid, "path": full_entry_path, "mime": mime}
     return children
 
-
-def get_images(file_id,file_path):
+@st.cache_data()
+def get_images(file_id, file_path):
     DB_HOST = os.getenv("DB_HOST")
     NC_ACC = os.getenv("NC_ACC")
     NC_PASS = os.getenv("NC_PASS")
-
-    server_url = f'''http://{DB_HOST}:8080/remote.php/dav/files/{NC_ACC}'''
-    preview_url = f'''http://{DB_HOST}:8080/core/preview?fileId={file_id}&x=1080&y=1080'''
     username = NC_ACC
     password = NC_PASS
 
     # Send a GET request to download the file
-    response = requests.get(preview_url, auth=HTTPBasicAuth(username, password), stream=True)
- 
-    # Check if the request was successful
-    if response.status_code == 200:
-        # Save the file content in memory using BytesIO
-        file_in_memory = BytesIO()
-        for chunk in response.iter_content(chunk_size=1024):
-            if chunk:
-                file_in_memory.write(chunk)
-        # Open the image using Pillow (PIL)
-        img = PILImage.open(file_in_memory)
-        return img
-    elif response.status_code == 404:
-        print(f"no preview availible for file: {file_id} {file_path}")
-    else:
-        print(f"Failed to download file. Status code: {response.status_code}")
-        print(response.text)
+    response = requests.get(file_path, auth=HTTPBasicAuth(username, password), stream=True)
+  
     try:
-        import gc
-        del file_in_memory
-        gc.collect()
-    except:
-        pass
-    
+        if response.status_code == 200:
+            file_in_memory = BytesIO()
+            for chunk in response.iter_content(chunk_size=1024):
+                if chunk:
+                    file_in_memory.write(chunk)
+            file_in_memory.seek(0) 
+            #img = Image.open(file_in_memory)
+            return file_id, file_in_memory
+        elif response.status_code == 404:
+            print(f"No preview available for file: {file_id} {file_path}")
+            return file_id, None
+        else:
+            print(f"Failed to download file. Status code: {response.status_code}")
+            print(response.text)
+            return file_id, None
+    except Exception as e:
+        print(f"Error downloading file {file_id}: {e}")
+        return file_id, None

@@ -4,6 +4,11 @@ from webdav_handler import *
 from dotenv import load_dotenv
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from io import BytesIO
+from IPython.display import display, Image
+from PIL import Image as PILImage
+from time import sleep
 
 load_dotenv()
 #####################
@@ -11,88 +16,85 @@ DB_HOST = os.getenv("DB_HOST")
 NC_ACC = os.getenv("NC_ACC")
 NC_PASS = os.getenv("NC_PASS")
 
-
-def flatten_dict_to_list(data):
-    result_list = []
-    
-    def process_dict(content):
-        for key, val in content.items():
-            # If it's a folder entry
-            if key.endswith("/"):
-                if isinstance(val, dict):
-                    process_dict(val)
-            # If it's a file entry with metadata
-            elif isinstance(val, dict) and 'name' in val:
-                result_list.append(val)
-    
-    # Start with the root content
-    if len(data) == 1:
-        first_val = next(iter(data.values()))
-        content = first_val
-    else:
-        content = data
-        
-    process_dict(content)
-    return result_list
-
+# Get tagged file IDs from the database
+@st.cache_data(show_spinner=True)
+def get_tags_from_id(df_data):
+    for index, row in df_data.iterrows():
+        file_id = row['fileid']
+        tags = get_tags_for_id(file_id)
+        tag_names = [tag['tag_name'] for tag in tags]
+        df_data.loc[index,'tagnames'] = ', '.join(tag_names)
+    return df_data
 
 def main():
-    server_url = f'http://{DB_HOST}:8080/remote.php/dav/files/{NC_ACC}'
-    username = NC_ACC
-    password = NC_PASS
-    path = "/Bre/Artwork//AI_art/"
 
-    client = webdav_login(server_url, username, password)
-    if client:
-        print("Client connected")
-        root_dict = {path.strip("/").split("/")[-1]: folder_to_dict_w_meta_tqdm(path, client, server_url)}
-    else:
-        print('Could not connect to WebDav. Check your .env file!')
-        sys.exit(10)
+    settings_cols= st.columns(2)
+    with settings_cols[0]:
+        N_of_cols = st.slider('Number of columns to display images',1,8,4,step=1)
+    with settings_cols[1]:
+        preview_size = st.slider('set preview size',540,1080,1080,step=540)
+    search_input = st.text_input('Search for art!',value='',key='search_input')
 
-    data_list = flatten_dict_to_list(root_dict)
-    print(f'Found {len(data_list)} files in storage')
-
+    df_data = get_preview_index(preview_size,DB_HOST)
+    print(f'Found {len(df_data)} files in storage')
+    #Gotta build a materilzed view for tag mapping later!!!
+    df_data = df_data.head(100)
     # Get tagged file IDs from the database
+    #for index, row in df_data.iterrows():
+    #    file_id = row['fileid']
+    #    tags = get_tags_from_id(file_id)
+    #    tag_names = [tag['tag_name'] for tag in tags]
+    #    df_data.loc[index,'tagnames'] = ', '.join(tag_names)
+    
 
-    N_of_cols = st.slider('set image size',1,10,5)
+    df_data = get_tags_from_id(df_data)
+    print("fetched tags")
+
+
+    if search_input =='':
+        # get 25 random files from df_data
+        df_start = df_data.head(100)
+        df_start = df_start.sample(n=25)
+    else:
+        df_start = df_data.loc[df_data['tagnames'].str.contains(search_input)]
+        if len(df_start) ==0:
+            st.write("No results found")
+            sleep(5)
+            search_input =''
+        elif len(df_start) >100:
+            df_start = df_start.sample(n=100)
+
 
     cols = st.columns(N_of_cols)
 
-    for row in data_list:
-        file_id = row['fileid']
-        tags = get_tags_from_id(file_id)
-        tag_names = [tag['tag_name'] for tag in tags]
-        row['tagnames'] = ', '.join(tag_names)
-            
-    
-    
-  
+
+    with ThreadPoolExecutor() as executor:
+        futures = []
+        for _, row in df_start.iterrows():
+            file_id = row["fileid"]
+            file_path = row["preview_url"]
+            futures.append(executor.submit(get_images, file_id, file_path))
+
+        results = {}
+        for future in as_completed(futures):
+            file_id, file_in_memory = future.result()
+            results[file_id] = file_in_memory
 
     for idx, col in enumerate(cols):
         with col:
-            len_col = len(data_list) // N_of_cols
+            len_col = len(df_start) // len(cols)
             start_idx = idx * len_col
-            end_idx = (idx + 1) * len_col if idx != N_of_cols - 1 else len(data_list)
-            display_data = data_list[start_idx:end_idx]
+            end_idx = (idx + 1) * len_col if idx != len(cols) - 1 else len(df_start)
+            display_data = df_start[start_idx:end_idx]
 
-            for row in display_data:
-                try:
-                    file_id = row['fileid']
-                    img_path = row['path']
-                    tag_names = row.get('tagnames', '')
+            for _, row in display_data.iterrows():
+                file_id = row["fileid"]
+                img = results.get(file_id)
+                if img:
+                    st.image(img.read())
+                    st.write(df_start.loc[_, 'tagnames'])
 
-                    st.image(get_images(file_id, img_path))
-                    st.write(f"{tag_names}")
 
-                except Exception as e:
-                    continue
-       #try:
-
-           # st.write(f"hypo: ")
-           # st.dataframe(get_hypo_search(file_id))
-        #except Exception as e:
-         #   print(f"no Preview availible for:{img_path} /n: {e}")
 
 
 main()

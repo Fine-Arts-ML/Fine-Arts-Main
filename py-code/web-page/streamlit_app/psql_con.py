@@ -7,6 +7,7 @@ load_dotenv()
 import pandas as pd
 
 
+
 def create_db_connection():
     load_dotenv()
     DB_HOST = os.getenv("DB_HOST")
@@ -40,7 +41,7 @@ def get_file_ids_of_tagged_images():
         print(f"An error occurred: {e}")
 
 
-def get_tags_from_id(id):
+def get_tags_for_id(id):
     engine = create_db_connection()
     metadata = MetaData()
 
@@ -75,3 +76,26 @@ def get_hypo_search(id):
         WHERE bre_advance_search.id = '{id}'
     ''', engine)
     return df_hypo
+
+def get_preview_index(preview_size, DB_HOST) :
+    engine = create_db_connection()
+    metadata = MetaData()
+
+    # Reflect the tables
+    Index_table = Table('bre_advance_index', metadata, autoload_with=engine)
+    query = select(Index_table)
+    with engine.connect() as connection:
+        df_index = pd.DataFrame(connection.execute(query).fetchall())
+
+        # Set column names
+        df_index.columns = Index_table.columns.keys()
+
+
+    for index, row in df_index.iterrows():
+        prev_url = row['preview_url']
+        prev_url = f'''http://{DB_HOST}:8080{prev_url.replace('{prevsize}', f'''x={preview_size}&y={preview_size}''')}'''
+        df_index.loc[index, 'preview_url'] = prev_url
+
+    return df_index
+
+
