@@ -1,5 +1,16 @@
 # Fine Arts - Read me
 most recent project steps are on top of README.md
+### Implemented first rudementary search engine
+
+- based on streamlit, psql and webdav backend of nextcloud
+
+[Search engine mockup](images/image.jpg)
+
+
+
+
+
+
 ### Data cleaning
 - Since the initial taging process of the DB is finished, the tags now need to be cleaned.
     - Lemmatized
