@@ -47,7 +47,7 @@ def main():
 
     if search_input =='':
         # get 25 random files from df_data
-        df_start = df_start.sample(n=25)
+        df_start = df_data.sample(n=25)
     else:
         output_search_str, output_aslist = modulate_search_phrase(search_input)
         if len(output_aslist) == 1:
