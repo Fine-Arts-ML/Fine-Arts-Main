@@ -39,7 +39,7 @@ def main():
     df_data = get_preview_index(preview_size,DB_HOST)
     print(f'Found {len(df_data)} files in storage')
     #Gotta build a materilzed view for tag mapping later!!!
-    df_data = df_data.head(100)
+    df_data = df_data.head(300)
 
     df_data = get_tags_from_id(df_data)
     print("fetched tags")
@@ -47,11 +47,26 @@ def main():
 
     if search_input =='':
         # get 25 random files from df_data
-        df_start = df_data.head(100)
         df_start = df_start.sample(n=25)
     else:
-        output_search_str = modulate_search_phrase(search_input)
-        df_start = df_data.loc[df_data['tagnames'].str.contains(output_search_str, flags= re.IGNORECASE, regex=True)]
+        output_search_str, output_aslist = modulate_search_phrase(search_input)
+        if len(output_aslist) == 1:
+            threshold = 1
+        else:
+            threshold =  len(output_aslist) * 2 // 3
+
+
+        def count_matches(row_tags):
+            matches = re.findall(output_search_str, row_tags)
+            return len(set(matches))
+
+
+        df_data['match_count'] = df_data['tagnames'].apply(count_matches)
+        df_start = df_data[df_data['match_count'] >= threshold]
+        df_start = df_start.sort_values(by='match_count', ascending=False).drop(columns=['match_count'])
+        st.write(f'''found {len(df_start)} art pieces''')
+
+        #df_start = df_data.loc[df_data['tagnames'].str.contains(output_search_str, flags= re.IGNORECASE, regex=True)]
         if len(df_start) ==0:
             st.write("No results found")
             sleep(5)

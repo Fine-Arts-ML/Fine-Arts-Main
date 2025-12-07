@@ -27,6 +27,6 @@ def modulate_search_phrase(input_str):
         input_lemma_list.append(" ".join([token.lemma_ for token in doc]))
     input_lemma_no_stop = [word for word in input_lemma_list if word not in stop_words]
     output_search_str = '|'.join(input_lemma_no_stop)
-    return output_search_str
-
+   # return input_lemma_no_stop
+    return output_search_str, input_lemma_no_stop
 
