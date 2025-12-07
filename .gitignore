@@ -7,3 +7,4 @@ py-code/image taging/__pycache__/*
 webdav_meta.json
 colors.csv
 py-code/web-page/streamlit_app/main.py
+*.DS_Store

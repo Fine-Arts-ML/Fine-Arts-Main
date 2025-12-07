@@ -2,6 +2,7 @@ import streamlit as st
 from psql_con import *
 from webdav_handler import *
 from dotenv import load_dotenv
+from search_func import *
 import os
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -39,13 +40,6 @@ def main():
     print(f'Found {len(df_data)} files in storage')
     #Gotta build a materilzed view for tag mapping later!!!
     df_data = df_data.head(100)
-    # Get tagged file IDs from the database
-    #for index, row in df_data.iterrows():
-    #    file_id = row['fileid']
-    #    tags = get_tags_from_id(file_id)
-    #    tag_names = [tag['tag_name'] for tag in tags]
-    #    df_data.loc[index,'tagnames'] = ', '.join(tag_names)
-    
 
     df_data = get_tags_from_id(df_data)
     print("fetched tags")
@@ -56,7 +50,8 @@ def main():
         df_start = df_data.head(100)
         df_start = df_start.sample(n=25)
     else:
-        df_start = df_data.loc[df_data['tagnames'].str.contains(search_input)]
+        output_search_str = modulate_search_phrase(search_input)
+        df_start = df_data.loc[df_data['tagnames'].str.contains(output_search_str, flags= re.IGNORECASE, regex=True)]
         if len(df_start) ==0:
             st.write("No results found")
             sleep(5)
