@@ -94,6 +94,7 @@ def color_search_func(df_data, search_input):
 def button_tag_list(df_start):
     df_rest_o_tags = df_start['tagnames'].str.split(',').explode()
     df_rest_o_tags = df_rest_o_tags.unique()
+    df_rest_o_tags = [x.strip(' ') for x in df_rest_o_tags]
     return df_rest_o_tags
 
 
