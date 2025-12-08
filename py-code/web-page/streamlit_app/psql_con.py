@@ -98,4 +98,43 @@ def get_preview_index(preview_size, DB_HOST) :
 
     return df_index
 
+def get_availible_colors():
+    engine = create_db_connection()
+    metadata = MetaData()
+    bre_advance_search = Table('bre_advance_search', metadata, autoload_with=engine)
+
+    query = select(
+        bre_advance_search.c.id,
+        bre_advance_search.c.is_color
+    ).where(
+        bre_advance_search.c.is_color == True
+    )
+
+    with engine.connect() as connection:
+        result = connection.execute(query)
+        color_ids = [{'id':row.id,'is_color': row.is_color} for row in result]
+
+
+    # Reflect the table
+    oc_systemtag = Table('oc_systemtag', metadata, autoload_with=engine)
+
+    # Build the query
+    query = select(
+        oc_systemtag.c.id,
+        oc_systemtag.c.name
+    )
+
+    # Execute the query and fetch results
+    with engine.connect() as connection:
+        result = connection.execute(query)
+        color_names = [{'id': row.id, 'name': row.name} for row in result]
+    df_color_names = pd.DataFrame(color_names)
+    df_color_ids = pd.DataFrame(color_ids)
+
+    df_colors = df_color_names.merge(df_color_ids, on = 'id', how= 'left')
+    df_colors = df_colors[df_colors['is_color'] == True].drop(columns='is_color')
+    df_colors = df_colors.rename(columns={'id':'id','name':'Color'})
+    return df_colors
+
+
 
