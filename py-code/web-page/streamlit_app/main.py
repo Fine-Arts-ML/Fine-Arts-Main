@@ -27,9 +27,7 @@ def get_tags_from_id(df_data):
         tag_names = [tag['tag_name'] for tag in tags]
         df_data.loc[index,'tagnames'] = ', '.join(tag_names)
     return df_data
-# Initialize session state for tag selection
-if 'tag_selection' not in st.session_state:
-    st.session_state.tag_selection = []
+
 def main():
 
 
@@ -44,7 +42,7 @@ def main():
         df_data = get_preview_index(preview_size,DB_HOST)
         print(f'Found {len(df_data)} files in storage')
         #Gotta build a materilzed view for tag mapping later!!!
-        df_data = df_data.head(50)
+        df_data = df_data.head(200)
         df_data = get_tags_from_id(df_data)
         search_method = st.sidebar.radio('Search method', options = ['Free text','Tag filter'])
         if search_method == 'Free text':
@@ -66,11 +64,6 @@ def main():
                     search_input = search_input + tag_selection
                     df_start, df_data = color_search_func(df_data, search_input)
 
-            if isinstance(tag_selection, list): # For multi-select
-                st.session_state.tag_selection.extend(tag_selection)
-            else: # For single select or if it returns a single item
-                if tag_selection and tag_selection not in st.session_state.tag_selection:
-                    st.session_state.tag_selection.append(tag_selection)
         else:
             st.write('Please choose a search method')
             search_input = ''
