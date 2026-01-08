@@ -35,8 +35,8 @@ def modulate_search_phrase(input_str):
 def free_text_search_func(df_data, search_input):
 
     if search_input =='':
-        # get 25 random files from df_data
-        df_start = df_data.sample(n=25)
+        # get 24 random files from df_data
+        df_start = df_data.sample(n=24)
     else:
         output_search_str, output_aslist = modulate_search_phrase(search_input)
         if len(output_aslist) == 1:
@@ -60,17 +60,17 @@ def free_text_search_func(df_data, search_input):
             st.write("No results found")
             sleep(5)
             search_input =''
-        elif len(df_start) >50:
-            df_start = df_start.sample(n=50)
+        #elif len(df_start) >50:
+        #    df_start = df_start.head(50)
 
     return df_start, df_data
 
 
 def color_search_func(df_data, search_input):
-    print(search_input)
+    #print(search_input)
     if len(search_input) == 0 or len(search_input) == 38:
-        # get 25 random files from df_data
-        df_start = df_data.sample(n=25)
+        # get 24 random files from df_data
+        df_start = df_data
     else:
         escaped_colors = [re.escape(color) for color in search_input]
         lookaheads = ''.join([f'(?=.*\\b{color}\\b)' for color in escaped_colors])
@@ -86,8 +86,8 @@ def color_search_func(df_data, search_input):
         if len(df_start) == 0:
             print("No results found")
             df_start = pd.DataFrame()  # Return empty DataFrame
-        elif len(df_start) > 50:
-            df_start = df_start.sample(n=50)  # Limit to 100 random results
+        #elif len(df_start) > 50:
+        #    df_start = df_start.head(50)  # Limit to 100 random results
 
     return df_start, df_data
 

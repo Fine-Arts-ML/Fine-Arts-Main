@@ -1,3 +1,4 @@
+from urllib import response
 from webdav3.client import Client
 from dotenv import load_dotenv
 load_dotenv()
@@ -108,16 +109,17 @@ def folder_to_dict_w_meta(path, client, server_url):
             children[entry] = {"name": entry, "id": id, "fileid": fileid, "path": full_entry_path, "mime": mime}
     return children
 
+
+
+
 @st.cache_data()
 def get_images(file_id, file_path):
     DB_HOST = os.getenv("DB_HOST")
     NC_ACC = os.getenv("NC_ACC")
     NC_PASS = os.getenv("NC_PASS")
-    username = NC_ACC
-    password = NC_PASS
 
     # Send a GET request to download the file
-    response = requests.get(file_path, auth=HTTPBasicAuth(username, password), stream=True)
+    response = requests.get(file_path, auth=HTTPBasicAuth(NC_ACC, NC_PASS), stream=True)
   
     try:
         if response.status_code == 200:
@@ -138,3 +140,14 @@ def get_images(file_id, file_path):
     except Exception as e:
         print(f"Error downloading file {file_id}: {e}")
         return file_id, None
+
+
+
+def make_img_link(file_path, file_id):
+    DB_HOST = os.getenv("DB_HOST")
+    NC_ACC = os.getenv("NC_ACC")
+    # Construct the full WebDAV URL for the file
+    file_path = re.sub(r'/[^/]*$', '', file_path)
+    nextcloud_url = f"http://{DB_HOST}:8080/apps/files/files/{file_id}?dir={file_path}&editing=false&openfile=true"
+    
+    return nextcloud_url

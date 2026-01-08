@@ -42,39 +42,40 @@ def get_file_ids_of_tagged_images():
 
 
 def get_tags_for_id(id):
-
     engine = create_db_connection()
     metadata = MetaData()
 
     # Reflect the tables
-    bre_search_index_live = Table('bre_search_index_live', metadata, autoload_with=engine)
+    oc_systemtag = Table('oc_systemtag', metadata, autoload_with=engine)
+    oc_systemtag_object_mapping = Table('oc_systemtag_object_mapping', metadata, autoload_with=engine)
 
     # Build the query
     query = select(
-        bre_search_index_live.c.tag_id.label('tag_id'),
-        bre_search_index_live.c.tag_name.label('tag_name'),
-        bre_search_index_live.c.objectid.label('objectid'),
-        bre_search_index_live.c.is_adjective.label('is_adjective'),
-        bre_search_index_live.c.lvl3_hyponym.label('lvl3_hyponym'),
+        oc_systemtag.c.id.label('tag_id'),
+        oc_systemtag.c.name.label('tag_name')
+    ).join(
+        oc_systemtag_object_mapping,
+        oc_systemtag_object_mapping.c.systemtagid == oc_systemtag.c.id
     ).where(
-            bre_search_index_live.c.objectid == id
-        )
+        oc_systemtag_object_mapping.c.objectid == id
+    )
+
     with engine.connect() as connection:
             result = connection.execute(query)
-            tags = [{'tag_id': row.tag_id, 'tag_name': row.tag_name, 'objectid': row.objectid, 'is_adjective': row.is_adjective, 'lvl3_hyponym': row.lvl3_hyponym} for row in result]
+            tags = [{'tag_id': row.tag_id, 'tag_name': row.tag_name} for row in result]
 
     return tags
 
 
-### this func is now integrated in get tags_for_id
-#def get_hypo_search(id):
-#    engine = create_db_connection()
-#    df_hypo = pd.read_sql(f'''
-#        SELECT *
-#        FROM bre_advance_search
-#        WHERE bre_advance_search.id = '{id}'
-#    ''', engine)
-#    return df_hypo
+
+def get_hypo_search(id):
+    engine = create_db_connection()
+    df_hypo = pd.read_sql(f'''
+        SELECT *
+        FROM bre_advance_search
+        WHERE bre_advance_search.id = '{id}'
+    ''', engine)
+    return df_hypo
 
 def get_preview_index(preview_size, DB_HOST) :
     engine = create_db_connection()
@@ -100,22 +101,39 @@ def get_preview_index(preview_size, DB_HOST) :
 def get_availible_colors():
     engine = create_db_connection()
     metadata = MetaData()
+    bre_advance_search = Table('bre_advance_search', metadata, autoload_with=engine)
+
+    query = select(
+        bre_advance_search.c.id,
+        bre_advance_search.c.is_color
+    ).where(
+        bre_advance_search.c.is_color == True
+    )
+
+    with engine.connect() as connection:
+        result = connection.execute(query)
+        color_ids = [{'id':row.id,'is_color': row.is_color} for row in result]
+
 
     # Reflect the table
-    view_avail_colors = Table('avail_colors', metadata, autoload_with=engine)
+    oc_systemtag = Table('oc_systemtag', metadata, autoload_with=engine)
 
     # Build the query
     query = select(
-        view_avail_colors.c.id,
-        view_avail_colors.c.color_name
+        oc_systemtag.c.id,
+        oc_systemtag.c.name
     )
 
     # Execute the query and fetch results
     with engine.connect() as connection:
         result = connection.execute(query)
+        color_names = [{'id': row.id, 'name': row.name} for row in result]
+    df_color_names = pd.DataFrame(color_names)
+    df_color_ids = pd.DataFrame(color_ids)
 
-    df_colors = pd.DataFrame(result)
-
+    df_colors = df_color_names.merge(df_color_ids, on = 'id', how= 'left')
+    df_colors = df_colors[df_colors['is_color'] == True].drop(columns='is_color')
+    df_colors = df_colors.rename(columns={'id':'id','name':'Color'})
     return df_colors
 
 
