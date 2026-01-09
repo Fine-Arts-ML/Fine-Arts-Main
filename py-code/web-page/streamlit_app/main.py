@@ -54,10 +54,8 @@ def main():
     with st.sidebar:
         settings_cols= st.columns(2)
         with settings_cols[0]:
-            #N_of_cols = st.slider('Number of columns to display images',1,8,4,step=1)
             N_of_cols = st.sidebar.selectbox('columns to display', options = [2,4,8])
         with settings_cols[1]:
-            #preview_size = st.slider('set preview size',540,1080,1080,step=540)
             preview_size = st.sidebar.selectbox('Image quality', options = [540,256,1080])
         df_data = get_preview_index(preview_size,DB_HOST)
         print(f'Found {len(df_data)} files in storage')
@@ -70,13 +68,17 @@ def main():
             search_input = st.text_input('Search for art!',value='',key='search_input')
             df_start, df_data = free_text_search_func(df_data, search_input)
         elif search_method == 'Tag filter':
+            #show reset button when filters get populated > 1
             if len(st.session_state.selected_color) or len(st.session_state.selected_tags) >=1:
                 #st.button('Reset Search',on_click=reset_search, icon=':material/reset_settings:')
                 st.pills('',[':material/reset_settings: Reset Search'],on_change=reset_search)
-            set_all_colors = get_availible_colors()
 
+            #get all colors from db as set  
+            set_all_colors = get_availible_colors()
+            #initial loading of dataset
             df_start = filter_for_color(df_data, st.session_state.selected_color)
 
+            #load availible tags from either initial dataset or filtered dataset
             set_start_tags = set()
             if st.session_state.selected_color ==[]:
                 for col in df_data.tagnames:
@@ -84,22 +86,23 @@ def main():
             else:
                 for col in df_start.tagnames:
                      set_start_tags.update(col.split(','))
-
+            #clean up set, so it can  be used for comparison functions
             set_start_tags = {item.strip(',').strip()for item in set_start_tags}
-            st.session_state.avail_colors = set_all_colors.intersection(set_start_tags)  
+            #get all colors from dataset, either initial or filtered dataset
+            st.session_state.avail_colors = set_all_colors.intersection(set_start_tags)
             st.session_state.selected_color = [color for color in st.session_state.selected_color if color in set_all_colors]
-  
+            #actual Pills for color, adjusment for whats displayed is on the fly via st.session_state
             st.pills(":material/filter_b_and_w: Colors", st.session_state.avail_colors, selection_mode="multi", key="selected_color")
 
 
-            # Get available tags from filtered DataFrame
+            #get available tags from filtered DataFrame, basically same as above
             df_start = filter_for_tags(df_start, st.session_state.selected_tags)
             avail_tags_uniq = button_tag_list(df_start)
             avail_tags_uniq = set(avail_tags_uniq).difference(st.session_state.avail_colors)         
-            # Remove any selected tags that are no longer available
+            #remove any selected tags that are no longer available
             st.session_state.selected_tags = [tag for tag in st.session_state.selected_tags if tag in avail_tags_uniq]
 
-            # Pills widget with dynamic options
+            #pills widget with dynamic options & limit to only selected pills when only one file is left in dataset
             if len(df_start)>1:
                 st.pills(":material/crossword: Tags", avail_tags_uniq, selection_mode="multi", key="selected_tags")
             else:
@@ -134,7 +137,7 @@ def main():
                     st.button(':material/chevron_left: Previous', on_click=decrement_counter,
                         kwargs=dict(decrement_value=12),use_container_width=True)
                 with res_counter:
-                        st.write(f'''  {st.session_state.count} :material/last_page: {st.session_state.count+12} ''')
+                        st.write(f'''{st.session_state.count} :material/last_page: {st.session_state.count+12 if len(df_start) >st.session_state.count+12 else len(df_start)}''')
                 with st_nav_right:
                     st.button('Next :material/chevron_right:',on_click=increment_counter,
                         kwargs=dict(increment_value=12),use_container_width=True)

@@ -1,10 +1,18 @@
 # Fine Arts - Read me
 most recent project steps are on top of README.md
-### Implemented first rudementary search engine
 
+### Hosting search engine (local)
+- gotta get the search engine hosted in docker
+
+### Implemented search engine
+- stream lineing search engine, added two functions:
+    - free natural language text search, for now missing operators AND OR NOR, might come later
+    - explorative search via tag pills, with two main categories, colors and rest (lol)
+- how ever it still needs a backend-change so the initial loading time gets way faster
+    - all other functions are quick and easy to use after the first startup
 - based on streamlit, psql and webdav backend of nextcloud
 
-[Search engine mockup](images/image.jpg)
+<img src='images/searchengine_rn0126.png' width=80%>
 
 
 
