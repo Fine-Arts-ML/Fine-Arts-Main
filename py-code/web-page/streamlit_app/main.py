@@ -39,38 +39,17 @@ def decrement_counter(decrement_value=0):
 	st.session_state.count -= decrement_value
 	return st.session_state.count
 
-def active_tags(tags):
-    st.session_state.active_tags = tags
-    return st.session_state.active_tags
 
-def pills(avail_tags, df_start, color_selection):
-    tag_selection =st.pills('Tags',avail_tags, selection_mode='multi')
-    df_start, avail_tags, tag_selection = filter_fragment(df_start, color_selection ,tag_selection)
-    st.write(tag_selection)
-    st.write(avail_tags)
-    return df_start
-
-@st.fragment
-def filter_fragment(df_start, color_selection ,tag_selection):
-    avail_tags = button_tag_list(df_start)
-    
-    search_input = color_selection["color_name"].to_list() + tag_selection
-    df_start, df_data = color_search_func(df_start, search_input)
-    st.write(df_start)
-    return df_start, avail_tags, tag_selection
-
-def filter_color(df_start, color_selection):
-    avail_tags = button_tag_list(df_start)
-    search_input = color_selection["color_name"].to_list()
-    df_start, df_data = color_search_func(df_start, search_input)
-    return df_start, avail_tags
+if "selected_tags" not in st.session_state:
+    st.session_state.selected_tags = []
+if "selected_color" not in st.session_state:
+    st.session_state.selected_color = []
+if 'avail_colors' not in st.session_state:
+    st.session_state.avail_colors = []
+if 'count' not in st.session_state:
+    st.session_state.count = 0  
 
 def main():
-
-    
-    if 'count' not in st.session_state:
-        st.session_state.count = 0  
-
 
     with st.sidebar:
         settings_cols= st.columns(2)
@@ -91,48 +70,53 @@ def main():
             search_input = st.text_input('Search for art!',value='',key='search_input')
             df_start, df_data = free_text_search_func(df_data, search_input)
         elif search_method == 'Tag filter':
-            #df_colors = get_availible_colors()
-            color_picker = DynamicFilters(get_availible_colors(), filters=['color_name'])
-            color_picker.display_filters()
-            df_chosen_colors = color_picker.filter_df()
-            search_input = df_chosen_colors["color_name"]
-            df_start, df_data = color_search_func(df_data, search_input)
-            
+            if len(st.session_state.selected_color) or len(st.session_state.selected_tags) >=1:
+                #st.button('Reset Search',on_click=reset_search, icon=':material/reset_settings:')
+                st.pills('',[':material/reset_settings: Reset Search'],on_change=reset_search)
+            set_all_colors = get_availible_colors()
 
-            if len(df_start) >= 1:
-                if color_picker:
-                    df_start, avail_tags = filter_color(df_start, df_chosen_colors)
+            df_start = filter_for_color(df_data, st.session_state.selected_color)
 
-            df_start = pills(avail_tags, df_start, df_chosen_colors)
-            
-            #    df_start, avail_tags, tag_selection = filter_fragment(df_start, df_chosen_colors,tag_selection)
-            
+            set_start_tags = set()
+            if st.session_state.selected_color ==[]:
+                for col in df_data.tagnames:
+                    set_start_tags.update(col.split(','))
+            else:
+                for col in df_start.tagnames:
+                     set_start_tags.update(col.split(','))
 
-           # def tag_multi_select(df_start, df_chosen_colors, avail_tags):
-            #    
-            #    tag_selection =st.pills('Tags',avail_tags, selection_mode='multi')
-            #    if tag_selection:
-            #        avail_tags = button_tag_list(df_start)
-            #        df_start, avail_tags = filter_fragment(df_start, df_chosen_colors,tag_selection)
-            #    return df_start, avail_tags
-                
-            #df_start, avail_tags = tag_multi_select(df_start, df_chosen_colors, avail_tags)
+            set_start_tags = {item.strip(',').strip()for item in set_start_tags}
+            st.session_state.avail_colors = set_all_colors.intersection(set_start_tags)  
+            st.session_state.selected_color = [color for color in st.session_state.selected_color if color in set_all_colors]
+  
+            st.pills(":material/filter_b_and_w: Colors", st.session_state.avail_colors, selection_mode="multi", key="selected_color")
 
-            
+
+            # Get available tags from filtered DataFrame
+            df_start = filter_for_tags(df_start, st.session_state.selected_tags)
+            avail_tags_uniq = button_tag_list(df_start)
+            avail_tags_uniq = set(avail_tags_uniq).difference(st.session_state.avail_colors)         
+            # Remove any selected tags that are no longer available
+            st.session_state.selected_tags = [tag for tag in st.session_state.selected_tags if tag in avail_tags_uniq]
+
+            # Pills widget with dynamic options
+            if len(df_start)>1:
+                st.pills(":material/crossword: Tags", avail_tags_uniq, selection_mode="multi", key="selected_tags")
+            else:
+                st.pills(":material/crossword: Tags", st.session_state.selected_tags, selection_mode="multi", key="selected_tags")
+
+       
+           
  
             
 
         else:
             st.write('Please choose a search method')
             search_input = ''
-  
-   # st.table(df_start.head(5))
-   
-    #df_data = get_tags_from_id(df_data)
-    print("fetched tags")
+    st.header(f'''Found {len(df_start)} art pieces''',text_alignment='center',divider='rainbow')
 
     cols = st.columns(N_of_cols)
- 
+  
     # If more than 12 images, show next button
     if len(df_start)>12:
         if st.session_state.count <12:

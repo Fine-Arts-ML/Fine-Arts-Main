@@ -116,7 +116,7 @@ def get_availible_colors():
 
     df_colors = pd.DataFrame(result)
 
-    return df_colors
+    return set(df_colors['color_name'])
 
 
 
