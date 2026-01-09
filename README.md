@@ -10,13 +10,35 @@ most recent project steps are on top of README.md
     - explorative search via tag pills, with two main categories, colors and rest (lol)
 - how ever it still needs a backend-change so the initial loading time gets way faster
     - all other functions are quick and easy to use after the first startup
+- can download source files via direct link to nextcloud, however only possible with a nextcloud account
 - based on streamlit, psql and webdav backend of nextcloud
 
 <img src='images/searchengine_rn0126.png' width=80%>
 
-
-
-
+### Postgres Backend Changes
+- added 2 new Views for faster operation of streamlit. Both views load far under 100ms
+    - avail_colors: this one checks which tags are colors and gives them back with name & id
+    ``` 
+    SELECT bas.id,
+    bas.is_color,
+    st.name AS color_name
+    FROM bre_advance_search bas
+    JOIN oc_systemtag st ON bas.id = st.id
+    WHERE bas.is_color = true;
+    ```
+    - bre_search_index_live: this one maps the preview files with file ids, names and path. it needs to be extended with the tags, for possibly the biggest performance imporvement in streamlit
+    ```
+    SELECT st.id AS tag_id,
+    st.name AS tag_name,
+    stom.objectid,
+    bas.is_color AS color,
+    bas.is_adjective,
+    bas.lvl3_hyponym,
+    bas.hyponym_all
+    FROM oc_systemtag st
+    JOIN oc_systemtag_object_mapping stom ON stom.systemtagid = st.id
+    LEFT JOIN bre_advance_search bas ON st.id = bas.id;
+    ```
 
 
 ### Data cleaning
@@ -24,7 +46,7 @@ most recent project steps are on top of README.md
     - Lemmatized
     - Similarity checked
     - clustered
-    - ??
+    - hyponyms added, for future similiarity calculations
 - this will most likely work best with direct interference w/ the psql backend of nextcloud.
 - most important tables for this step are:
     - `oc_systemtag`
