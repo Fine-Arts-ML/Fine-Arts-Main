@@ -1,0 +1,5 @@
+.env
+dockerfile
+test.ipynb
+/__pycache__
+docker-compose.yml

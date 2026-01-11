@@ -1,0 +1,18 @@
+services:
+  # Streamlit:search engine
+  streamlit:
+    image: streamlit:latest
+    container_name: streamlit
+    environment:
+      - PUID=1000 # Update with your user ID
+      - PGID=1000 # Update with your group ID
+      - DB_HOST=${DB_HOST} # PostgreSQL hostname
+      - DB_NAME=${DB_NAME} # Database name for Nextcloud
+      - DB_USER=${DB_USER} # Database user for Nextcloud
+      - DB_PASSWORD=${DB_PASSWORD} # Database password for Nextcloud
+      - NC_ACC=${NC_ACC}
+      - NC_PASS=${NC_PASS}
+      - URL=${EXTERNAL_URL}
+    ports:
+      - 5432:5432
+      - 8501:8501

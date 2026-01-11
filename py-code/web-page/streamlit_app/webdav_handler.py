@@ -114,7 +114,6 @@ def folder_to_dict_w_meta(path, client, server_url):
 
 @st.cache_data()
 def get_images(file_id, file_path):
-    DB_HOST = os.getenv("DB_HOST")
     NC_ACC = os.getenv("NC_ACC")
     NC_PASS = os.getenv("NC_PASS")
 
@@ -144,10 +143,9 @@ def get_images(file_id, file_path):
 
 
 def make_img_link(file_path, file_id):
-    DB_HOST = os.getenv("DB_HOST")
-    NC_ACC = os.getenv("NC_ACC")
+    URL = os.getenv("EXTERNAL_URL")
     # Construct the full WebDAV URL for the file
     file_path = re.sub(r'/[^/]*$', '', file_path)
-    nextcloud_url = f"http://{DB_HOST}:8080/apps/files/files/{file_id}?dir={file_path}&editing=false&openfile=true"
+    nextcloud_url = f"https://{URL}/apps/files/files/{file_id}?dir={file_path}&editing=false&openfile=true"
     
     return nextcloud_url
