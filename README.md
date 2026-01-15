@@ -1,8 +1,13 @@
 # Fine Arts - Read me
 most recent project steps are on top of README.md
 
+### Image reverse search
+- Starting the image reverse search build.
+    - either its going to be hosted in the allready availible pqsl or via a vectordb
+    - art pieces will be fingerprinted and probably sliced into 3 feature categories: color, contours and complete sets
+
 ### Hosting search engine (local)
-- gotta get the search engine hosted in docker
+- hosted the search engine via docker-compose & cloudflare tunnel behind a login
 
 ### Implemented search engine
 - stream lineing search engine, added two functions:
