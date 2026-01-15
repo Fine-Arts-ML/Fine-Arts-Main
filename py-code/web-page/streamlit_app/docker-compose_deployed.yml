@@ -13,6 +13,7 @@ services:
       - NC_ACC=${NC_ACC}
       - NC_PASS=${NC_PASS}
       - URL=${EXTERNAL_URL}
+    command: streamlit
     ports:
       - 5433:5432
       - 8501:8501
