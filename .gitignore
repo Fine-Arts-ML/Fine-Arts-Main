@@ -9,6 +9,5 @@ colors.csv
 py-code/web-page/streamlit_app/main.py
 *.DS_Store
 py-code/web-page/__pycache__/psql_con.cpython-313.pyc
-.gitignore
 py-code/web-page/__pycache__/webdav_handler.cpython-313.pyc
 py-code/web-page/__pycache__/search_func.cpython-313.pyc
