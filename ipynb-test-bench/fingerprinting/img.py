@@ -1,0 +1,2 @@
+import imagehash
+print('ok')

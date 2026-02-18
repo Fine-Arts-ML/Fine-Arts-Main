@@ -3,6 +3,7 @@
 image_cache
 ipynb-code/webdav_meta.json
 py-code/image taging/__pycache__/*
+ipynb-test-bench/fingerprinting/testdata
 
 webdav_meta.json
 colors.csv
