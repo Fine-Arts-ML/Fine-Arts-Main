@@ -12,3 +12,4 @@ py-code/web-page/streamlit_app/main.py
 py-code/web-page/__pycache__/psql_con.cpython-313.pyc
 py-code/web-page/__pycache__/webdav_handler.cpython-313.pyc
 py-code/web-page/__pycache__/search_func.cpython-313.pyc
+ipynb-test-bench/fingerprinting/caffe_model/*
