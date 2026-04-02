@@ -83,7 +83,7 @@ def get_preview_index(preview_size, db_host):
     return df_index
 
 
-def get_images(file_id, file_path, webdav_path=None, preview_size=540):
+def get_images(file_id, file_path, webdav_path=None, preview_size=1080):
     """
     Download an image from a preview URL or fall back to WebDAV.
     Uses an in-memory cache to avoid re-downloading the same image.
@@ -92,7 +92,7 @@ def get_images(file_id, file_path, webdav_path=None, preview_size=540):
         file_id (str): Unique identifier for the file
         file_path (str): URL to the preview image
         webdav_path (str, optional): Path to the original file via WebDAV
-        preview_size (int): Target size for image resizing (default: 540)
+        preview_size (int): Target size for image resizing (default: 1080)
     
     Returns:
         tuple: (file_id, PIL.Image or None)
@@ -187,7 +187,7 @@ def push_index(df_index):
     return len(data_to_insert)
 
 
-def process_in_chunks(df, chunk_size=10, preview_size=540):
+def process_in_chunks(df, chunk_size=10, preview_size=1080):
     """
     Process the DataFrame in chunks, computing hashes and uploading after each chunk.
     

@@ -6,13 +6,56 @@ and compare them against all hashes in the database to find the closest matches.
 """
 
 import streamlit as st
-from PIL import Image
+from PIL import Image, ImageOps
 import imagehash
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, MetaData, Table, select
 import pandas as pd
 from io import BytesIO
+from urllib.parse import quote
+
+# Enable TIFF support (both uppercase and lowercase extensions)
+Image.registered_extensions()['.TIF'] = 'TIFF'
+Image.registered_extensions()['.TIFF'] = 'TIFF'
+Image.registered_extensions()['.tif'] = 'TIFF'
+Image.registered_extensions()['.tiff'] = 'TIFF'
+
+
+def load_image_from_bytesio(file_bytes):
+    """
+    Load an image from BytesIO, handling TIFF files properly.
+    
+    Parameters:
+        file_bytes (BytesIO): BytesIO object containing image data
+    
+    Returns:
+        PIL.Image: Loaded image
+    """
+    # Seek to beginning to ensure we read from start
+    file_bytes.seek(0)
+    
+    # Read all data to ensure it's complete
+    data = file_bytes.read()
+    file_bytes = BytesIO(data)
+    
+    # Open image
+    img = Image.open(file_bytes)
+    
+    # Handle multi-page TIFFs - load only the first frame
+    if hasattr(img, 'n_frames') and img.n_frames > 1:
+        img.seek(0)  # Go to first frame
+    
+    # Force load the image data
+    img.load()
+    
+    # Convert to RGB if necessary (handles RGBA, P, LA, CMYK, etc.)
+    if img.mode in ('RGBA', 'P', 'LA', 'CMYK', 'L'):
+        img = img.convert('RGB')
+    elif img.mode != 'RGB':
+        img = img.convert('RGB')
+    
+    return img
 
 
 def create_db_connection():
@@ -175,7 +218,8 @@ def main():
     
     if uploaded_file is not None:
         # Display uploaded image
-        img = Image.open(uploaded_file)
+        img_bytes = BytesIO(uploaded_file.read())
+        img = load_image_from_bytesio(img_bytes)
         img = img.resize((300, 300))
         
         # Compute hashes
@@ -259,7 +303,7 @@ def main():
                                 if chunk:
                                     file_in_memory.write(chunk)
                             file_in_memory.seek(0)
-                            match_img = Image.open(file_in_memory)
+                            match_img = load_image_from_bytesio(file_in_memory)
                             match_img = match_img.resize((1080, 1080))
                             st.image(match_img, use_container_width=True)
                             
@@ -274,6 +318,48 @@ def main():
                                     st.code(f"AHASH: {best_match['a_hash']}")
                                 with col_c:
                                     st.code(f"PHASH: {best_match['p_hash']}")
+                        elif response.status_code == 404:
+                            # Fall back to WebDAV if preview_url fails
+                            webdav_path = best_match.get('webdav_path')
+                            if webdav_path:
+                                # Ensure webdav_path starts with / for proper URL construction
+                                if not webdav_path.startswith('/'):
+                                    webdav_path = '/' + webdav_path
+                                # Ensure NC_ACC is not None
+                                nc_acc = NC_ACC if NC_ACC else ''
+                                webdav_base_url = f'http://{DB_HOST}:8080/remote.php/dav/files/{nc_acc}/'
+                                # URL-encode the path to handle spaces and special characters
+                                webdav_file_url = f'{webdav_base_url}{quote(webdav_path, safe="/")}'
+                                
+                                webdav_response = requests.get(
+                                    webdav_file_url,
+                                    auth=HTTPBasicAuth(NC_ACC, NC_PASS),
+                                    stream=True
+                                )
+                                if webdav_response.status_code == 200:
+                                    file_in_memory = BytesIO()
+                                    for chunk in webdav_response.iter_content(chunk_size=1024):
+                                        if chunk:
+                                            file_in_memory.write(chunk)
+                                    file_in_memory.seek(0)
+                                    source_img = load_image_from_bytesio(file_in_memory)
+                                    match_img = source_img.resize((1080, 1080))
+                                    st.image(match_img, use_container_width=True)
+                                    
+                                    with st.expander("Details", expanded=False):
+                                        st.metric(f"{hash_type} Distance", best_match[selected_hash_col])
+                                        st.metric("Overall Distance", best_match['min_distance'])
+                                        st.metric("Best Hash Type", best_match['best_hash_type'])
+                                        col_a, col_b, col_c = st.columns(3)
+                                        with col_a:
+                                            st.code(f"WHASH: {best_match['w_hash']}")
+                                        with col_b:
+                                            st.code(f"AHASH: {best_match['a_hash']}")
+                                        with col_c:
+                                            st.code(f"PHASH: {best_match['p_hash']}")
+                                else:
+                                    st.caption(f"Could not load image from WebDAV. Status code: {webdav_response.status_code}")
+                                    st.caption(f"WebDAV URL: {webdav_file_url}")
                     except Exception as e:
                         st.caption(f"Could not load image: {e}")
             
@@ -318,7 +404,7 @@ def main():
                                                 if chunk:
                                                     file_in_memory.write(chunk)
                                             file_in_memory.seek(0)
-                                            match_img = Image.open(file_in_memory)
+                                            match_img = load_image_from_bytesio(file_in_memory)
                                             match_img = match_img.resize((1080, 1080))
                                             st.image(match_img, use_container_width=True)
                                             
@@ -334,20 +420,18 @@ def main():
                                                 with col_c:
                                                     st.code(f"PHASH: {match['p_hash']}")
                                         elif response.status_code == 404:
-                                            # No preview available, fall back to direct HTTP GET from WebDAV
-                                            # Use the webdav_path column from the database
-                                            webdav_path = match.get('webdav_path')
-                                            
-                                            if webdav_path is not None and webdav_path != '':
-                                                # webdav_path is like: /Bre/Artwork/AI_art/bearbeitet/klimt%20bruecke2.tiff
-                                                # Full URL: http://{DB_HOST}:8080/remote.php/dav/files/{NC_ACC}{webdav_path}
-                                                webdav_file_url = f'http://{DB_HOST}:8080/remote.php/dav/files/{NC_ACC}{webdav_path}'
-                                            else:
-                                                # Fallback: construct from preview_url
-                                                preview_url = match['preview_url']
-                                                # Remove the ?{prevsize} part if present
-                                                webdav_path = preview_url.split('?')[0]
-                                                webdav_file_url = f'http://{DB_HOST}:8080{webdav_path}'
+                                            # WebDAV path to original file
+                                            # print(f"No preview available for file: {file_id}, loading original via WebDAV...")
+                                            # Fall back to WebDAV if webdav_path is provided
+                                            webdav_path = match.get('webdav_path')  # GET file webdav path from df_hashes
+                                            # Ensure webdav_path starts with / for proper URL construction
+                                            if webdav_path and not webdav_path.startswith('/'):
+                                                webdav_path = '/' + webdav_path
+                                            # Ensure NC_ACC is not None and has a trailing slash
+                                            nc_acc = NC_ACC if NC_ACC else ''
+                                            webdav_base_url = f'http://{DB_HOST}:8080/remote.php/dav/files/{nc_acc}/'
+                                            # URL-encode the path to handle spaces and special characters
+                                            webdav_file_url = f'{webdav_base_url}{quote(webdav_path, safe="/")}' if webdav_path else webdav_base_url
                                             
                                             webdav_response = requests.get(
                                                 webdav_file_url,
@@ -360,7 +444,7 @@ def main():
                                                     if chunk:
                                                         file_in_memory.write(chunk)
                                                 file_in_memory.seek(0)
-                                                source_img = Image.open(file_in_memory)
+                                                source_img = load_image_from_bytesio(file_in_memory)
                                                 match_img = source_img.resize((1080, 1080))
                                                 st.image(match_img, use_container_width=True)
                                                 
