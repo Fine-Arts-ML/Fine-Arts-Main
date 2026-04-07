@@ -6,7 +6,12 @@ Provides functions for database connections and queries.
 import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, MetaData, Table, select, insert, delete, update, func
+from sqlalchemy.types import Integer
 import pandas as pd
+import requests
+from requests.auth import HTTPBasicAuth
+from io import BytesIO
+from PIL import Image
 
 
 def create_db_connection():
@@ -31,6 +36,168 @@ def create_db_connection():
     return engine
 
 
+# ============================================================================
+# GENERIC CRUD FUNCTIONS
+# ============================================================================
+
+def get_all_entities(table_name: str, id_column: str, name_column: str) -> pd.DataFrame:
+    """
+    Generic function to fetch all entities from a table.
+    
+    Parameters:
+        table_name (str): Name of the database table
+        id_column (str): Name of the ID column
+        name_column (str): Name of the name column
+        
+    Returns:
+        pd.DataFrame: DataFrame with id and name columns
+    """
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the table
+    table = Table(table_name, metadata, autoload_with=engine)
+    
+    # Get column references
+    id_col = table.c[id_column]
+    name_col = table.c[name_column]
+    
+    # Build column names for DataFrame
+    df_columns = [id_column, name_column]
+    
+    query = select(id_col, name_col)
+    
+    with engine.begin() as connection:
+        result = connection.execute(query)
+        rows = result.fetchall()
+    
+    if rows:
+        df = pd.DataFrame(rows, columns=df_columns)
+    else:
+        df = pd.DataFrame(columns=df_columns)
+    return df
+
+
+def add_entity(table_name: str, id_column: str, name_column: str, name_value: str) -> int:
+    """
+    Generic function to add a new entity to a table.
+    
+    Parameters:
+        table_name (str): Name of the database table
+        id_column (str): Name of the ID column
+        name_column (str): Name of the name column
+        name_value (str): Name value to add
+        
+    Returns:
+        int: The ID of the added/existing entity
+    """
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the table
+    table = Table(table_name, metadata, autoload_with=engine)
+    
+    # Get column references
+    id_col = table.c[id_column]
+    name_col = table.c[name_column]
+    
+    with engine.begin() as connection:
+        # Get max ID
+        result = connection.execute(select(func.max(id_col)))
+        max_id = result.scalar() or 0
+        
+        # Check if entity already exists by name
+        result = connection.execute(select(name_col).where(name_col == name_value))
+        existing = result.scalar()
+        
+        if existing:
+            # Entity already exists, return the actual id of the existing entity
+            result = connection.execute(select(id_col).where(name_col == name_value))
+            return result.scalar()
+        else:
+            # Entity is new, find the smallest available ID (reuse gaps)
+            # Get all existing IDs
+            result = connection.execute(select(id_col))
+            existing_ids = set(row[0] for row in result.fetchall())
+            
+            # Find the first missing ID starting from 1
+            new_id = 1
+            while new_id in existing_ids:
+                new_id += 1
+            
+            # If no gaps found, use max_id + 1
+            if new_id > max_id:
+                new_id = max_id + 1
+            
+            values = {id_column: new_id, name_column: name_value}
+            connection.execute(insert(table).values(**values))
+            return new_id
+
+
+def remove_entity(table_name: str, id_column: str, id_value: int) -> bool:
+    """
+    Generic function to remove an entity from a table.
+    
+    Parameters:
+        table_name (str): Name of the database table
+        id_column (str): Name of the ID column
+        id_value (int): ID value to remove
+        
+    Returns:
+        bool: True if entity was removed, False if not found
+    """
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the table
+    table = Table(table_name, metadata, autoload_with=engine)
+    
+    # Get column reference
+    id_col = table.c[id_column]
+    
+    # Delete entity
+    with engine.begin() as connection:
+        result = connection.execute(delete(table).where(id_col == id_value))
+        return result.rowcount > 0
+
+
+def update_entity(table_name: str, id_column: str, name_column: str,
+                  id_value: int, new_name: str) -> bool:
+    """
+    Generic function to update an entity's name in a table.
+    
+    Parameters:
+        table_name (str): Name of the database table
+        id_column (str): Name of the ID column
+        name_column (str): Name of the name column
+        id_value (int): ID value to update
+        new_name (str): New name value
+        
+    Returns:
+        bool: True if entity was updated, False if not found
+    """
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the table
+    table = Table(table_name, metadata, autoload_with=engine)
+    
+    # Get column references
+    id_col = table.c[id_column]
+    name_col = table.c[name_column]
+    
+    # Update entity name
+    with engine.begin() as connection:
+        result = connection.execute(
+            update(table).where(id_col == id_value).values(**{name_column: new_name})
+        )
+        return result.rowcount > 0
+
+
+# ============================================================================
+# SHOP CRUD FUNCTIONS (using generic functions)
+# ============================================================================
+
 def get_all_shops():
     """
     Fetch all shops from the bre_shops table.
@@ -38,28 +205,7 @@ def get_all_shops():
     Returns:
         pandas.DataFrame: DataFrame with shop_id and shop_name columns
     """
-    engine = create_db_connection()
-    metadata = MetaData()
-    
-    # Reflect the table
-    bre_shops = Table('bre_shops', metadata, autoload_with=engine)
-    
-    # Query all data - use column names from the actual table
-    shop_id_col = bre_shops.c.shop_id
-    shop_name_col = bre_shops.c.shop_name
-    
-    query = select(shop_id_col, shop_name_col)
-    
-    with engine.begin() as connection:
-        result = connection.execute(query)
-        rows = result.fetchall()
-    
-    if rows:
-        df = pd.DataFrame(rows, columns=['shop_id', 'shop_name'])
-    else:
-        df = pd.DataFrame(columns=['shop_id', 'shop_name'])
-    print(df)
-    return df
+    return get_all_entities('bre_shops', 'shop_id', 'shop_name')
 
 
 def add_shop(shop_name: str) -> int:
@@ -72,37 +218,7 @@ def add_shop(shop_name: str) -> int:
     Returns:
         int: The shop_id of the newly added shop
     """
-    engine = create_db_connection()
-    metadata = MetaData()
-    
-    # Reflect the table
-    bre_shops = Table('bre_shops', metadata, autoload_with=engine)
-    
-    # Step 1: Get the table from the db
-    with engine.begin() as connection:
-        # Step 2: Count the entries (get max shop_id)
-        result = connection.execute(
-            select(func.max(bre_shops.c.shop_id))
-        )
-        max_shop_id = result.scalar() or 0
-        
-        # Step 3: Check if the shop is already present in the db
-        result = connection.execute(
-            select(bre_shops.c.shop_name).where(bre_shops.c.shop_name == shop_name)
-        )
-        existing_shop = result.scalar()
-        
-        # Step 4: If shop is new, then append it with a new id
-        if existing_shop:
-            # Shop already exists, return its id
-            return max_shop_id
-        else:
-            # Shop is new, assign new id (max_shop_id + 1)
-            new_shop_id = max_shop_id + 1
-            connection.execute(
-                insert(bre_shops).values(shop_id=new_shop_id, shop_name=shop_name)
-            )
-            return new_shop_id
+    return add_entity('bre_shops', 'shop_id', 'shop_name', shop_name)
 
 
 def remove_shop(shop_id: int) -> bool:
@@ -115,18 +231,7 @@ def remove_shop(shop_id: int) -> bool:
     Returns:
         bool: True if shop was removed, False if not found
     """
-    engine = create_db_connection()
-    metadata = MetaData()
-    
-    # Reflect the table
-    bre_shops = Table('bre_shops', metadata, autoload_with=engine)
-    
-    # Delete shop
-    with engine.begin() as connection:
-        result = connection.execute(
-            delete(bre_shops).where(bre_shops.c.shop_id == shop_id)
-        )
-        return result.rowcount > 0
+    return remove_entity('bre_shops', 'shop_id', shop_id)
 
 
 def update_shop(shop_id: int, new_shop_name: str) -> bool:
@@ -140,18 +245,7 @@ def update_shop(shop_id: int, new_shop_name: str) -> bool:
     Returns:
         bool: True if shop was updated, False if not found
     """
-    engine = create_db_connection()
-    metadata = MetaData()
-    
-    # Reflect the table
-    bre_shops = Table('bre_shops', metadata, autoload_with=engine)
-    
-    # Update shop name
-    with engine.begin() as connection:
-        result = connection.execute(
-            update(bre_shops).where(bre_shops.c.shop_id == shop_id).values(shop_name=new_shop_name)
-        )
-        return result.rowcount > 0
+    return update_entity('bre_shops', 'shop_id', 'shop_name', shop_id, new_shop_name)
 
 
 def get_all_accounts() -> pd.DataFrame:
@@ -161,31 +255,7 @@ def get_all_accounts() -> pd.DataFrame:
     Returns:
         pandas.DataFrame: DataFrame with account_id and account_name columns
     """
-    engine = create_db_connection()
-    metadata = MetaData()
-    
-    try:
-        # Reflect the table
-        bre_shop_account = Table('bre_shop_account', metadata, autoload_with=engine)
-        
-        # Query all data
-        account_id_col = bre_shop_account.c.account_id
-        account_name_col = bre_shop_account.c.account_name
-        
-        query = select(account_id_col, account_name_col)
-        
-        with engine.begin() as connection:
-            result = connection.execute(query)
-            rows = result.fetchall()
-        
-        if rows:
-            df = pd.DataFrame(rows, columns=['account_id', 'account_name'])
-        else:
-            df = pd.DataFrame(columns=['account_id', 'account_name'])
-        return df
-    except Exception as e:
-        print(f"Error fetching accounts: {e}")
-        return pd.DataFrame(columns=['account_id', 'account_name'])
+    return get_all_entities('bre_shop_account', 'account_id', 'account_name')
 
 
 def add_account(account_name: str) -> int:
@@ -198,38 +268,12 @@ def add_account(account_name: str) -> int:
     Returns:
         int: The account_id of the newly added account
     """
-    engine = create_db_connection()
-    metadata = MetaData()
-    
-    # Reflect the table
-    bre_shop_account = Table('bre_shop_account', metadata, autoload_with=engine)
-    
-    with engine.begin() as connection:
-        # Get max account_id
-        result = connection.execute(
-            select(func.max(bre_shop_account.c.account_id))
-        )
-        max_account_id = result.scalar() or 0
-        
-        # Check if account already exists
-        result = connection.execute(
-            select(bre_shop_account.c.account_name).where(bre_shop_account.c.account_name == account_name)
-        )
-        existing_account = result.scalar()
-        
-        if existing_account:
-            return max_account_id
-        else:
-            new_account_id = max_account_id + 1
-            connection.execute(
-                insert(bre_shop_account).values(account_id=new_account_id, account_name=account_name)
-            )
-            return new_account_id
+    return add_entity('bre_shop_account', 'account_id', 'account_name', account_name)
 
 
 def link_account_to_shop(shop_id: int, account_id: int) -> bool:
     """
-    Link an account to a shop in the bre_shop_account table.
+    Link an account to a shop in the bre_shop_account_matrix table.
     
     Parameters:
         shop_id (int): ID of the shop
@@ -241,15 +285,15 @@ def link_account_to_shop(shop_id: int, account_id: int) -> bool:
     engine = create_db_connection()
     metadata = MetaData()
     
-    # Reflect the table
-    bre_shop_account = Table('bre_shop_account', metadata, autoload_with=engine)
+    # Reflect the new matching table
+    bre_shop_account_matrix = Table('bre_shop_account_matrix', metadata, autoload_with=engine)
     
     with engine.begin() as connection:
         # Check if already linked
         result = connection.execute(
-            select(bre_shop_account.c.account_id).where(
-                bre_shop_account.c.shop_id == shop_id,
-                bre_shop_account.c.account_id == account_id
+            select(bre_shop_account_matrix.c.account_id).where(
+                bre_shop_account_matrix.c.shop_id == shop_id,
+                bre_shop_account_matrix.c.account_id == account_id
             )
         )
         existing = result.scalar()
@@ -259,14 +303,14 @@ def link_account_to_shop(shop_id: int, account_id: int) -> bool:
         
         # Link account to shop
         connection.execute(
-            insert(bre_shop_account).values(shop_id=shop_id, account_id=account_id)
+            insert(bre_shop_account_matrix).values(shop_id=shop_id, account_id=account_id)
         )
         return True
 
 
 def remove_account_from_shop(shop_id: int, account_id: int) -> bool:
     """
-    Remove an account from a shop in the bre_shop_account table.
+    Remove an account from a shop in the bre_shop_account_matrix table.
     
     Parameters:
         shop_id (int): ID of the shop
@@ -278,14 +322,14 @@ def remove_account_from_shop(shop_id: int, account_id: int) -> bool:
     engine = create_db_connection()
     metadata = MetaData()
     
-    # Reflect the table
-    bre_shop_account = Table('bre_shop_account', metadata, autoload_with=engine)
+    # Reflect the new matching table
+    bre_shop_account_matrix = Table('bre_shop_account_matrix', metadata, autoload_with=engine)
     
     with engine.begin() as connection:
         result = connection.execute(
-            delete(bre_shop_account).where(
-                bre_shop_account.c.shop_id == shop_id,
-                bre_shop_account.c.account_id == account_id
+            delete(bre_shop_account_matrix).where(
+                bre_shop_account_matrix.c.shop_id == shop_id,
+                bre_shop_account_matrix.c.account_id == account_id
             )
         )
         return result.rowcount > 0
@@ -293,7 +337,7 @@ def remove_account_from_shop(shop_id: int, account_id: int) -> bool:
 
 def get_accounts_for_shop(shop_id: int) -> pd.DataFrame:
     """
-    Get all accounts linked to a specific shop.
+    Get all accounts linked to a specific shop using the bre_shop_account_matrix table.
     
     Parameters:
         shop_id (int): ID of the shop
@@ -305,14 +349,18 @@ def get_accounts_for_shop(shop_id: int) -> pd.DataFrame:
     metadata = MetaData()
     
     # Reflect the tables
+    bre_shop_account_matrix = Table('bre_shop_account_matrix', metadata, autoload_with=engine)
     bre_shop_account = Table('bre_shop_account', metadata, autoload_with=engine)
     
-    # Query all data
-    account_id_col = bre_shop_account.c.account_id
-    account_name_col = bre_shop_account.c.account_name
-    
-    query = select(account_id_col, account_name_col).where(
-        bre_shop_account.c.shop_id == shop_id
+    # Query all data - join the matrix table with the account table
+    query = select(
+        bre_shop_account_matrix.c.account_id,
+        bre_shop_account.c.account_name
+    ).join(
+        bre_shop_account,
+        bre_shop_account_matrix.c.account_id == bre_shop_account.c.account_id
+    ).where(
+        bre_shop_account_matrix.c.shop_id == shop_id
     )
     
     with engine.begin() as connection:
@@ -324,6 +372,9 @@ def get_accounts_for_shop(shop_id: int) -> pd.DataFrame:
     else:
         df = pd.DataFrame(columns=['account_id', 'account_name'])
     return df
+
+
+
 
 
 def get_file_count_for_shop(shop_id: int) -> int:
@@ -518,3 +569,178 @@ def get_file_info(file_id: int) -> dict:
                 'webdav_path': result.path
             }
         return {}
+
+
+def get_files_for_shop_account(shop_id: int, account_id: int) -> pd.DataFrame:
+    """
+    Get all files linked to a specific account for a specific shop.
+    Files are linked to accounts via the bre_account_index table with columns 'file_id' and 'account_id'.
+    
+    Parameters:
+        shop_id (int): ID of the shop
+        account_id (int): ID of the account
+        
+    Returns:
+        pandas.DataFrame: DataFrame with file_id, filename, and preview_url columns
+    """
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the tables
+    bre_account_index = Table('bre_account_index', metadata, autoload_with=engine)
+    bre_advance_index = Table('bre_advance_index', metadata, autoload_with=engine)
+    
+    # Query files for the account - join bre_account_index with bre_advance_index
+    query = select(
+        bre_account_index.c.file_id.label('file_id'),
+        bre_advance_index.c.name.label('filename'),
+        bre_advance_index.c.preview_url.label('preview_url')
+    ).join(
+        bre_advance_index,
+        bre_advance_index.c.fileid.cast(Integer) == bre_account_index.c.file_id.cast(Integer)
+    ).where(
+        bre_account_index.c.account_id == account_id
+    )
+    
+    with engine.begin() as connection:
+        result = connection.execute(query)
+        rows = result.fetchall()
+    
+    if rows:
+        df = pd.DataFrame(rows, columns=['file_id', 'filename', 'preview_url'])
+    else:
+        df = pd.DataFrame(columns=['file_id', 'filename', 'preview_url'])
+    return df
+
+
+def get_files_for_shop_account_paginated(shop_id: int, account_id: int, page_size: int = 20, offset: int = 0) -> tuple:
+    """
+    Get all files linked to a specific account for a specific shop with pagination.
+    Files are linked to accounts via the bre_account_index table with columns 'file_id' and 'account_id'.
+    
+    Parameters:
+        shop_id (int): ID of the shop
+        account_id (int): ID of the account
+        page_size (int): Number of files per page
+        offset (int): Number of files to skip (for pagination)
+        
+    Returns:
+        tuple: (files_df, total_count) where files_df is a DataFrame with file info
+               and total_count is the total number of files for this shop-account combination
+    """
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the tables
+    bre_account_index = Table('bre_account_index', metadata, autoload_with=engine)
+    bre_advance_index = Table('bre_advance_index', metadata, autoload_with=engine)
+    
+    # Get total count first
+    count_query = select(func.count()).select_from(
+        select(bre_account_index.c.file_id).where(
+            bre_account_index.c.account_id == account_id
+        ).subquery()
+    )
+    
+    with engine.begin() as connection:
+        total_result = connection.execute(count_query).fetchone()
+        total_count = total_result[0] if total_result else 0
+    
+    # Build query with pagination
+    subquery = select(bre_account_index.c.file_id).where(
+        bre_account_index.c.account_id == account_id
+    ).limit(page_size).offset(offset).subquery()
+    
+    query = select(
+        subquery.c.file_id.label('file_id'),
+        bre_advance_index.c.name.label('filename'),
+        bre_advance_index.c.preview_url.label('preview_url')
+    ).join(
+        bre_advance_index,
+        bre_advance_index.c.fileid.cast(Integer) == subquery.c.file_id.cast(Integer)
+    )
+    
+    with engine.begin() as connection:
+        result = connection.execute(query)
+        rows = result.fetchall()
+    
+    if rows:
+        df = pd.DataFrame(rows, columns=['file_id', 'filename', 'preview_url'])
+    else:
+        df = pd.DataFrame(columns=['file_id', 'filename', 'preview_url'])
+    
+    return df, total_count
+
+
+# In-memory cache for downloaded images (file_id -> PIL Image)
+image_cache = {}
+
+
+def get_preview_image(file_id: int, preview_url: str, db_host: str = None) -> Image.Image:
+    """
+    Download and cache a preview image from Nextcloud.
+    
+    Parameters:
+        file_id (int): ID of the file
+        preview_url (str): Relative preview URL from database
+        db_host (str): Database host for URL construction
+        
+    Returns:
+        PIL.Image: Resized image (540x540) or None if failed
+    """
+    if db_host is None:
+        load_dotenv()
+        db_host = os.getenv("DB_HOST", "192.168.0.150")
+    
+    nc_acc = os.getenv("NC_ACC")
+    nc_pass = os.getenv("NC_PASS")
+    
+    # Check cache first
+    if file_id in image_cache:
+        return image_cache[file_id]
+    
+    # Construct full preview URL
+    if preview_url.startswith('/core/preview'):
+        full_url = f"http://{db_host}:8080{preview_url.replace('{prevsize}', 'x=540&y=540')}"
+    else:
+        full_url = preview_url
+    
+    # Send a GET request to download the preview
+    response = requests.get(full_url, auth=HTTPBasicAuth(nc_acc, nc_pass), stream=True)
+    
+    try:
+        if response.status_code == 200:
+            file_in_memory = BytesIO()
+            for chunk in response.iter_content(chunk_size=1024):
+                if chunk:
+                    file_in_memory.write(chunk)
+            file_in_memory.seek(0)
+            img = Image.open(file_in_memory)
+            img = img.resize((540, 540))
+            image_cache[file_id] = img  # Cache the image
+            return img
+        elif response.status_code == 404:
+            # Fall back to WebDAV if needed
+            webdav_base_url = f'http://{db_host}:8080/remote.php/dav/files/{nc_acc}'
+            webdav_file_url = f'{webdav_base_url}{preview_url}'
+            
+            try:
+                webdav_response = requests.get(webdav_file_url, auth=HTTPBasicAuth(nc_acc, nc_pass), stream=True)
+                if webdav_response.status_code == 200:
+                    file_in_memory = BytesIO()
+                    for chunk in webdav_response.iter_content(chunk_size=1024):
+                        if chunk:
+                            file_in_memory.write(chunk)
+                    file_in_memory.seek(0)
+                    source_img = Image.open(file_in_memory)
+                    img = source_img.resize((540, 540))
+                    image_cache[file_id] = img
+                    return img
+            except Exception as e:
+                print(f"Error downloading via WebDAV for file {file_id}: {e}")
+        else:
+            print(f"Failed to download file. Status code: {response.status_code}")
+        return None
+    except Exception as e:
+        print(f"Error downloading file {file_id}: {e}")
+        return None
