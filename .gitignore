@@ -3,13 +3,13 @@
 image_cache
 ipynb-code/webdav_meta.json
 py-code/image taging/__pycache__/*
-
+ipynb-test-bench/fingerprinting/testdata
 webdav_meta.json
 colors.csv
 py-code/web-page/streamlit_app/main.py
 *.DS_Store
-py-code/web-page/streamlit_app/streamlit_app.tar
-py-code/web-page/streamlit_app/__pycache__/psql_con.cpython-313.pyc
-py-code/web-page/streamlit_app/__pycache__/search_func.cpython-313.pyc
-.gitignore
-py-code/web-page/streamlit_app/__pycache__/webdav_handler.cpython-313.pyc
+py-code/web-page/__pycache__/psql_con.cpython-313.pyc
+py-code/web-page/__pycache__/webdav_handler.cpython-313.pyc
+py-code/web-page/__pycache__/search_func.cpython-313.pyc
+ipynb-test-bench/fingerprinting/caffe_model/*
+ipynb-test-bench/image taging/live_pic/
