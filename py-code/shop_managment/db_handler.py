@@ -335,6 +335,69 @@ def remove_account_from_shop(shop_id: int, account_id: int) -> bool:
         return result.rowcount > 0
 
 
+def link_file_to_account(file_id: int, account_id: int) -> bool:
+    """
+    Link a file to an account in the bre_account_index table.
+    
+    Parameters:
+        file_id (int): ID of the file to link
+        account_id (int): ID of the account to link to
+        
+    Returns:
+        bool: True if link was created, False if already exists or error
+    """
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the table
+    bre_account_index = Table('bre_account_index', metadata, autoload_with=engine)
+    
+    # Check if link already exists
+    check_query = select(bre_account_index.c.file_id).where(
+        bre_account_index.c.file_id == file_id,
+        bre_account_index.c.account_id == account_id
+    )
+    
+    with engine.begin() as connection:
+        existing = connection.execute(check_query).fetchone()
+        if existing:
+            return False
+        
+        # Insert new link
+        result = connection.execute(
+            insert(bre_account_index).values(file_id=file_id, account_id=account_id)
+        )
+        return result.rowcount > 0
+
+
+def unlink_file_from_account(file_id: int, account_id: int) -> bool:
+    """
+    Remove a file link from an account in the bre_account_index table.
+    
+    Parameters:
+        file_id (int): ID of the file to unlink
+        account_id (int): ID of the account to unlink from
+        
+    Returns:
+        bool: True if link was removed, False if not found
+    """
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the table
+    bre_account_index = Table('bre_account_index', metadata, autoload_with=engine)
+    
+    # Delete link
+    with engine.begin() as connection:
+        result = connection.execute(
+            delete(bre_account_index).where(
+                bre_account_index.c.file_id == file_id,
+                bre_account_index.c.account_id == account_id
+            )
+        )
+        return result.rowcount > 0
+
+
 def get_accounts_for_shop(shop_id: int) -> pd.DataFrame:
     """
     Get all accounts linked to a specific shop using the bre_shop_account_matrix table.
@@ -422,20 +485,27 @@ def get_files_for_shop(shop_id: int, page_size: int = 20, offset: int = 0) -> tu
     # Reflect the tables
     bre_shops_index = Table('bre_shops_index', metadata, autoload_with=engine)
     bre_advance_index = Table('bre_advance_index', metadata, autoload_with=engine)
+    bre_account_index = Table('bre_account_index', metadata, autoload_with=engine)
     
-    # Build query with pagination
-    subquery = select(bre_shops_index.c.id).where(
+    # Build query with pagination - cast id to Integer for proper type matching
+    subquery = select(bre_shops_index.c.id.cast(Integer).label('id')).where(
         bre_shops_index.c.shop_id == shop_id
     ).limit(page_size).offset(offset).subquery()
     
+    # Join with bre_account_index to get account_id for each file
     query = select(
         subquery.c.id.label('file_id'),
         bre_advance_index.c.name.label('filename'),
         bre_advance_index.c.preview_url.label('preview_url'),
-        bre_advance_index.c.path.label('webdav_path')
+        bre_advance_index.c.path.label('webdav_path'),
+        bre_account_index.c.account_id.label('account_id')
     ).join(
         bre_advance_index,
-        subquery.c.id == bre_advance_index.c.fileid
+        subquery.c.id == bre_advance_index.c.fileid.cast(Integer)
+    ).join(
+        bre_account_index,
+        subquery.c.id == bre_account_index.c.file_id.cast(Integer),
+        isouter=True  # Left join to include files without account links
     )
     
     with engine.begin() as connection:
@@ -443,9 +513,9 @@ def get_files_for_shop(shop_id: int, page_size: int = 20, offset: int = 0) -> tu
         rows = result.fetchall()
     
     if rows:
-        df = pd.DataFrame(rows, columns=['file_id', 'filename', 'preview_url', 'webdav_path'])
+        df = pd.DataFrame(rows, columns=['file_id', 'filename', 'preview_url', 'webdav_path', 'account_id'])
     else:
-        df = pd.DataFrame(columns=['file_id', 'filename', 'preview_url', 'webdav_path'])
+        df = pd.DataFrame(columns=['file_id', 'filename', 'preview_url', 'webdav_path', 'account_id'])
     
     # Get total count
     total_count = get_file_count_for_shop(shop_id)
@@ -534,6 +604,34 @@ def get_all_file_ids() -> list:
     with engine.begin() as connection:
         result = connection.execute(query).fetchall()
         return [row[0] for row in result]
+
+
+def get_all_file_ids_with_info() -> pd.DataFrame:
+    """
+    Get all available file IDs with their info from the bre_advance_index table.
+    
+    Returns:
+        pandas.DataFrame: DataFrame with file_id, filename, and preview_url columns
+    """
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the table
+    bre_advance_index = Table('bre_advance_index', metadata, autoload_with=engine)
+    
+    query = select(
+        bre_advance_index.c.fileid.label('file_id'),
+        bre_advance_index.c.name.label('filename'),
+        bre_advance_index.c.preview_url
+    )
+    
+    with engine.begin() as connection:
+        result = connection.execute(query).fetchall()
+        if result:
+            df = pd.DataFrame(result, columns=['file_id', 'filename', 'preview_url'])
+        else:
+            df = pd.DataFrame(columns=['file_id', 'filename', 'preview_url'])
+        return df
 
 
 def get_file_info(file_id: int) -> dict:
@@ -670,6 +768,46 @@ def get_files_for_shop_account_paginated(shop_id: int, account_id: int, page_siz
         df = pd.DataFrame(columns=['file_id', 'filename', 'preview_url'])
     
     return df, total_count
+
+
+def get_all_hashes_from_db() -> pd.DataFrame:
+    """
+    Get all perceptual hashes from the bre_hashes table along with file info.
+    
+    Returns:
+        pandas.DataFrame: DataFrame with id, filename, w_hash, a_hash, p_hash,
+                         preview_url, and webdav_path columns (matching fingerprinting module)
+    """
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the tables
+    bre_hashes = Table('bre_hashes', metadata, autoload_with=engine)
+    bre_advance_index = Table('bre_advance_index', metadata, autoload_with=engine)
+    
+    # Query all data with file info using INNER JOIN on fileid = id
+    query = select(
+        bre_hashes.c.id.label('id'),
+        bre_hashes.c.w_hash,
+        bre_hashes.c.a_hash,
+        bre_hashes.c.p_hash,
+        bre_advance_index.c.name.label('filename'),
+        bre_advance_index.c.preview_url.label('preview_url'),
+        bre_advance_index.c.path.label('webdav_path')
+    ).join(
+        bre_advance_index,
+        bre_hashes.c.id == bre_advance_index.c.fileid
+    )
+    
+    with engine.begin() as connection:
+        result = connection.execute(query).fetchall()
+        if result:
+            df = pd.DataFrame(result, columns=['id', 'w_hash', 'a_hash', 'p_hash',
+                                                'filename', 'preview_url', 'webdav_path'])
+        else:
+            df = pd.DataFrame(columns=['id', 'w_hash', 'a_hash', 'p_hash',
+                                       'filename', 'preview_url', 'webdav_path'])
+        return df
 
 
 # In-memory cache for downloaded images (file_id -> PIL Image)

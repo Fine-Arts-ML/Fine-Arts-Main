@@ -8,8 +8,9 @@ webdav_meta.json
 colors.csv
 py-code/web-page/streamlit_app/main.py
 *.DS_Store
-py-code/web-page/__pycache__/psql_con.cpython-313.pyc
-py-code/web-page/__pycache__/webdav_handler.cpython-313.pyc
-py-code/web-page/__pycache__/search_func.cpython-313.pyc
+*.pyc
 ipynb-test-bench/fingerprinting/caffe_model/*
 ipynb-test-bench/image taging/live_pic/
+/.roo
+/plans/*
+py-code/shop_managment/utils/constants.py
