@@ -5,7 +5,7 @@ This app allows users to manage shops and their linked files from the database.
 """
 
 import streamlit as st
-from db_handler import get_all_shops, get_all_accounts
+from db_handler import get_all_shops, get_all_accounts, get_files_for_shop, unlink_file_from_account
 from ui_components import render_shop_selector, render_files_view
 
 
@@ -50,14 +50,9 @@ def main():
     
     # Files Tab
     with Files_tab:
-        # Shop selector - returns list of (shop_name, shop_id) tuples and tabs object
-        shop_list, tabs = render_shop_selector(shops_df)
-        if shop_list:
-            for idx, (shop_name, shop_id) in enumerate(shop_list):
-                with tabs[idx]:
-                    # show_files=False to only show the "Add files" form without the file listing
-                    render_files_view(shop_id, tab_context=f"tab_{idx}", show_files=False)
-
-
+        # Shop selector - returns list of (shop_name, shop_id) tuples and list of account tabs
+        # The account tabs now include Overview as the first tab
+        shop_list, account_tabs_list = render_shop_selector(shops_df)
+    
 if __name__ == "__main__":
     main()

@@ -4,7 +4,10 @@ Account table components for the Shop Management app.
 
 import streamlit as st
 import pandas as pd
-from db_handler import get_accounts_for_shop, get_all_accounts, link_account_to_shop, remove_account_from_shop
+from db_handler import (
+    get_accounts_for_shop, get_all_accounts, link_account_to_shop,
+    remove_account_from_shop, remove_entity, update_entity
+)
 from forms.account_form import render_add_account_form, render_edit_account_form, render_remove_account_form
 from utils.helpers import render_info_table
 
@@ -45,7 +48,6 @@ def render_accounts_table(accounts_df: pd.DataFrame) -> None:
                     with subcol2:
                         if st.button("🗑️", key=f"remove_acc_global_{row['account_id']}"):
                             try:
-                                from db_handler import remove_entity
                                 if remove_entity('bre_shop_account', 'account_id', row['account_id']):
                                     st.success(f"Account '{row['account_name']}' removed")
                                     st.rerun()
@@ -65,7 +67,6 @@ def render_accounts_table(accounts_df: pd.DataFrame) -> None:
                     with save_col:
                         if st.button("💾 Save", key=f"save_acc_global_btn_{row['account_id']}"):
                             try:
-                                from db_handler import update_entity
                                 if update_entity('bre_shop_account', 'account_id', 'account_name',
                                        row['account_id'], new_name):
                                     st.success(f"Account name updated to '{new_name}'")
@@ -95,8 +96,6 @@ def render_account_table(shop_id: int, shops_df: pd.DataFrame) -> None:
         shops_df: DataFrame with shop_id and shop_name columns
     """
     try:
-        from db_handler import get_all_shops
-        
         # Get accounts linked to this shop
         linked_df = get_accounts_for_shop(shop_id)
         
@@ -186,7 +185,6 @@ def render_account_table(shop_id: int, shops_df: pd.DataFrame) -> None:
                                 with save_col:
                                     if st.button("💾 Save", key=f"save_acc_btn_{row['account_id']}"):
                                         try:
-                                            from db_handler import update_entity
                                             if update_entity('bre_shop_account', 'account_id', 'account_name',
                                                    row['account_id'], new_name):
                                                 st.success(f"Account name updated to '{new_name}'")

@@ -398,6 +398,73 @@ def unlink_file_from_account(file_id: int, account_id: int) -> bool:
         return result.rowcount > 0
 
 
+def get_accounts_for_file(file_id: int) -> pd.DataFrame:
+    """
+    Get all accounts linked to a specific file using the bre_account_index table.
+    
+    Parameters:
+        file_id (int): ID of the file
+        
+    Returns:
+        pandas.DataFrame: DataFrame with account_id and account_name columns
+    """
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the tables
+    bre_account_index = Table('bre_account_index', metadata, autoload_with=engine)
+    bre_shop_account = Table('bre_shop_account', metadata, autoload_with=engine)
+    
+    # Query all data - join the index table with the account table
+    query = select(
+        bre_account_index.c.account_id,
+        bre_shop_account.c.account_name
+    ).join(
+        bre_shop_account,
+        bre_account_index.c.account_id == bre_shop_account.c.account_id
+    ).where(
+        bre_account_index.c.file_id == file_id
+    )
+    
+    with engine.begin() as connection:
+        result = connection.execute(query)
+        rows = result.fetchall()
+    
+    if rows:
+        df = pd.DataFrame(rows, columns=['account_id', 'account_name'])
+    else:
+        df = pd.DataFrame(columns=['account_id', 'account_name'])
+    return df
+
+
+def get_shop_for_file(file_id: int, shop_id: int) -> bool:
+    """
+    Check if a specific file is linked to a specific shop.
+    
+    Parameters:
+        file_id (int): ID of the file
+        shop_id (int): ID of the shop
+        
+    Returns:
+        bool: True if file is linked to shop, False otherwise
+    """
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the table
+    bre_shops_index = Table('bre_shops_index', metadata, autoload_with=engine)
+    
+    # Check if link exists
+    query = select(func.count()).where(
+        bre_shops_index.c.id == file_id,
+        bre_shops_index.c.shop_id == shop_id
+    )
+    
+    with engine.begin() as connection:
+        result = connection.execute(query).fetchone()
+        return result[0] > 0 if result else False
+
+
 def get_accounts_for_shop(shop_id: int) -> pd.DataFrame:
     """
     Get all accounts linked to a specific shop using the bre_shop_account_matrix table.
@@ -466,46 +533,43 @@ def get_file_count_for_shop(shop_id: int) -> int:
         return result[0] if result else 0
 
 
-def get_files_for_shop(shop_id: int, page_size: int = 20, offset: int = 0) -> tuple:
+def get_files_for_shop(shop_id: int) -> pd.DataFrame:
     """
-    Fetch files linked to a specific shop with pagination.
+    Get all files linked to a specific shop across all accounts.
+    Files are linked to accounts via the bre_account_index table with columns 'file_id' and 'account_id'.
     
     Parameters:
         shop_id (int): ID of the shop
-        page_size (int): Number of files per page
-        offset (int): Number of files to skip (for pagination)
         
     Returns:
-        tuple: (files_df, total_count) where files_df is a DataFrame with file info
-               and total_count is the total number of files for this shop
+        pandas.DataFrame: DataFrame with file_id, filename, account_name, and preview_url columns
     """
     engine = create_db_connection()
     metadata = MetaData()
     
     # Reflect the tables
-    bre_shops_index = Table('bre_shops_index', metadata, autoload_with=engine)
-    bre_advance_index = Table('bre_advance_index', metadata, autoload_with=engine)
     bre_account_index = Table('bre_account_index', metadata, autoload_with=engine)
+    bre_advance_index = Table('bre_advance_index', metadata, autoload_with=engine)
+    bre_shop_account_matrix = Table('bre_shop_account_matrix', metadata, autoload_with=engine)
+    bre_shop_account = Table('bre_shop_account', metadata, autoload_with=engine)
     
-    # Build query with pagination - cast id to Integer for proper type matching
-    subquery = select(bre_shops_index.c.id.cast(Integer).label('id')).where(
-        bre_shops_index.c.shop_id == shop_id
-    ).limit(page_size).offset(offset).subquery()
-    
-    # Join with bre_account_index to get account_id for each file
+    # Query files for the shop - join bre_account_index with bre_advance_index and bre_shop_account_matrix
     query = select(
-        subquery.c.id.label('file_id'),
+        bre_account_index.c.file_id.label('file_id'),
         bre_advance_index.c.name.label('filename'),
         bre_advance_index.c.preview_url.label('preview_url'),
-        bre_advance_index.c.path.label('webdav_path'),
-        bre_account_index.c.account_id.label('account_id')
+        bre_shop_account.c.account_name.label('account_name')
     ).join(
         bre_advance_index,
-        subquery.c.id == bre_advance_index.c.fileid.cast(Integer)
+        bre_advance_index.c.fileid.cast(Integer) == bre_account_index.c.file_id.cast(Integer)
     ).join(
-        bre_account_index,
-        subquery.c.id == bre_account_index.c.file_id.cast(Integer),
-        isouter=True  # Left join to include files without account links
+        bre_shop_account_matrix,
+        bre_shop_account_matrix.c.account_id == bre_account_index.c.account_id
+    ).join(
+        bre_shop_account,
+        bre_shop_account.c.account_id == bre_account_index.c.account_id
+    ).where(
+        bre_shop_account_matrix.c.shop_id == shop_id
     )
     
     with engine.begin() as connection:
@@ -513,14 +577,11 @@ def get_files_for_shop(shop_id: int, page_size: int = 20, offset: int = 0) -> tu
         rows = result.fetchall()
     
     if rows:
-        df = pd.DataFrame(rows, columns=['file_id', 'filename', 'preview_url', 'webdav_path', 'account_id'])
+        df = pd.DataFrame(rows, columns=['file_id', 'filename', 'preview_url', 'account_name'])
     else:
-        df = pd.DataFrame(columns=['file_id', 'filename', 'preview_url', 'webdav_path', 'account_id'])
+        df = pd.DataFrame(columns=['file_id', 'filename', 'preview_url', 'account_name'])
     
-    # Get total count
-    total_count = get_file_count_for_shop(shop_id)
-    
-    return df, total_count
+    return df
 
 
 def link_file_to_shop(file_id: int, shop_id: int) -> bool:

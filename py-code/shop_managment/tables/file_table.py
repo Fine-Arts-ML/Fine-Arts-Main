@@ -36,7 +36,7 @@ def render_files_table(shop_id: int, total_files: int) -> None:
         
         # Get files for this shop
         try:
-            files_df, _ = get_files_for_shop(shop_id, page_size=10000, offset=0)
+            files_df = get_files_for_shop(shop_id)
             
             if not files_df.empty:
                 for _, row in files_df.iterrows():
@@ -135,9 +135,9 @@ def render_infinite_scroll_file_list(shop_id: int, total_files: int) -> None:
     # Get current loaded count
     loaded_count = st.session_state[f"loaded_{shop_id}"]
     
-    # Fetch more files
+    # Fetch more files (pagination removed - returns all files)
     if st.button("Load More Files", key=f"load_more_{shop_id}"):
-        files_df, _ = get_files_for_shop(shop_id, page_size=batch_size, offset=loaded_count)
+        files_df = get_files_for_shop(shop_id)
         
         if not files_df.empty:
             # Store files in session state
@@ -147,23 +147,3 @@ def render_infinite_scroll_file_list(shop_id: int, total_files: int) -> None:
             st.session_state[f"loaded_{shop_id}"] += len(files_df)
         
         st.rerun()
-    
-    # Display loaded files
-    if f"files_{shop_id}" in st.session_state and st.session_state[f"files_{shop_id}"]:
-        files_list = st.session_state[f"files_{shop_id}"]
-        
-        for file_data in files_list:
-            render_file_row(file_data, shop_id, is_infinite_scroll=True, files_list=files_list)
-        
-        # Show progress
-        st.write(f"Loaded {loaded_count} of {total_files} files")
-        
-        if loaded_count < total_files:
-            st.info("Click 'Load More' to load additional files...")
-        else:
-            st.success("All files loaded!")
-    else:
-        if total_files == 0:
-            st.info(f"No files linked to this shop yet.")
-        else:
-            st.info(f"Click 'Load More' to load files (total: {total_files})")

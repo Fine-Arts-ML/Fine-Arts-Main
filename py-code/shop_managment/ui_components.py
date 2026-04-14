@@ -7,10 +7,12 @@ import streamlit as st
 import pandas as pd
 from db_handler import (
     get_all_shops, get_accounts_for_shop, link_file_to_shop, link_account_to_shop,
-    get_files_for_shop, get_all_file_ids_with_info, get_files_for_shop_account_paginated,
-    unlink_file_from_account, get_preview_image
+    get_files_for_shop, get_all_file_ids_with_info, get_files_for_shop_account,
+    unlink_file_from_account, get_preview_image, get_file_count_for_shop,
+    get_accounts_for_file
 )
 from forms.file_form import render_add_file_form, show_file_selection_modal
+from tables.file_table import render_file_row
 from utils.constants import HASH_TYPES
 
 
@@ -24,7 +26,6 @@ def render_files_view(shop_id: int, tab_context: str = None, show_files: bool = 
         show_files: Whether to show the file listing (default True). Set to False for "Add files" tab.
     """
     from tables import render_files_table, render_infinite_scroll_file_list
-    
 
     # Display files container (only search form, no file listing)
     if show_files:
@@ -49,7 +50,7 @@ def render_files_view(shop_id: int, tab_context: str = None, show_files: bool = 
             
             # Get files for this shop
             try:
-                files_df, _ = get_files_for_shop(shop_id, page_size=10000, offset=0)
+                files_df = get_files_for_shop(shop_id)
                 
                 if not files_df.empty:
                     for _, row in files_df.iterrows():
@@ -65,33 +66,103 @@ def render_files_view(shop_id: int, tab_context: str = None, show_files: bool = 
                 st.error(f"Error loading files: {e}")
 
 
-def get_file_count_for_shop(shop_id: int) -> int:
+def render_overview_tab(shop_id: int, account_tabs, tab_index: int, shops_df: pd.DataFrame) -> None:
     """
-    Get the total number of files linked to a specific shop.
+    Render the Overview tab for a shop.
     
     Parameters:
         shop_id: ID of the shop
-        
-    Returns:
-        int: Number of files linked to the shop
+        account_tabs: The Streamlit tabs object for account tabs
+        tab_index: The index of this tab in the account_tabs list
+        shops_df: DataFrame with shop_id and shop_name columns
     """
-    from db_handler import create_db_connection
-    from sqlalchemy import create_engine, MetaData, Table, select, func
-    
-    engine = create_db_connection()
-    metadata = MetaData()
-    
-    # Reflect the table
-    bre_shops_index = Table('bre_shops_index', metadata, autoload_with=engine)
-    
-    # Count files for shop
-    query = select(func.count()).select_from(
-        select(bre_shops_index.c.id).where(bre_shops_index.c.shop_id == shop_id).subquery()
-    )
-    
-    with engine.begin() as connection:
-        result = connection.execute(query).fetchone()
-        return result[0] if result else 0
+    with account_tabs[tab_index]:
+        st.markdown("## Overview - All Files for Selected Shop")
+        
+        # Get all files for the selected shop (shop_id is already known from the shop tab)
+        try:
+            files_df = get_files_for_shop(shop_id)
+            
+            if not files_df.empty:
+                st.markdown(f"**Total files:** {len(files_df)}")
+                
+                # Display files in a dataframe table
+                display_df = files_df[['file_id', 'filename', 'account_name', 'preview_url']].copy()
+                st.dataframe(display_df, use_container_width=True)
+                
+                # Add remove functionality
+                st.markdown("### Remove Files")
+                
+                # Create a selectbox to choose which file to remove
+                file_options = {f"{row['filename']} (ID: {row['file_id']})": row['file_id']
+                                for _, row in files_df.iterrows()}
+                
+                selected_file_key = st.selectbox("Select file to remove", list(file_options.keys()), key=f"remove_{shop_id}")
+                
+                if selected_file_key:
+                    file_id = file_options[selected_file_key]
+                    
+                    # Get account info for this file
+                    file_info = files_df[files_df['file_id'] == file_id].iloc[0]
+                    account_name = file_info['account_name']
+                    
+                    # Get all accounts linked to this file
+                    try:
+                        accounts_df = get_accounts_for_file(file_id)
+                        other_accounts = accounts_df[accounts_df['account_id'] != file_info['account_id']]
+                    except Exception:
+                        other_accounts = pd.DataFrame(columns=['account_id', 'account_name'])
+                    
+                    # Check if file is linked to this shop
+                    from db_handler import get_shop_for_file
+                    is_linked_to_shop = get_shop_for_file(file_id, shop_id)
+                    
+                    # Get shop name for display
+                    shop_name = ""
+                    if not shops_df.empty:
+                        shop_row = shops_df[shops_df['shop_id'] == shop_id]
+                        if not shop_row.empty:
+                            shop_name = shop_row['shop_name'].values[0]
+                    
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.info(f"Removing file '{selected_file_key}' from account '{account_name}'")
+                        if is_linked_to_shop and shop_name:
+                            delete_shop_link = st.checkbox(
+                                f"Also remove shop link (delete from {shop_name})",
+                                key=f"delete_shop_{file_id}_{shop_id}"
+                            )
+                    with col2:
+                        if st.button("Remove", key=f"remove_{file_id}_{shop_id}"):
+                            try:
+                                # Unlink file from account
+                                success = unlink_file_from_account(file_id, account_id=file_id)
+                                if success:
+                                    # Check if file is still linked to other accounts
+                                    if not other_accounts.empty:
+                                        st.success(f"File '{selected_file_key}' removed from account '{account_name}'")
+                                        st.info(f"File is still linked to {len(other_accounts)} other account(s)")
+                                    else:
+                                        st.success(f"File '{selected_file_key}' removed from account '{account_name}'")
+                                    
+                                    # Remove shop link if checkbox was checked
+                                    if is_linked_to_shop and delete_shop_link:
+                                        from db_handler import unlink_file_from_shop
+                                        shop_link_removed = unlink_file_from_shop(file_id, shop_id)
+                                        if shop_link_removed:
+                                            st.success(f"File '{selected_file_key}' also removed from shop link")
+                                    
+                                    # Refresh the dataframe
+                                    files_df = get_files_for_shop(shop_id)
+                                    st.rerun()
+                                else:
+                                    st.error("Failed to remove file")
+                            except Exception as e:
+                                st.error(f"Error removing file: {e}")
+            else:
+                st.markdown("No files found for this shop.")
+        except Exception as e:
+            st.error(f"Error loading files: {e}")
 
 
 def render_file_row(file_data: dict, shop_id: int, is_infinite_scroll: bool = False, files_list: list = None) -> None:
@@ -149,20 +220,9 @@ def render_add_files_tab(shop_id: int, account_tabs, tab_index: int = 1) -> None
         tab_index: The index of this tab in the account_tabs list (default: 1)
     """
     with account_tabs[tab_index]:
-        # VISUAL DEBUG MARKER: Add a visible marker at the start
-        st.markdown(
-            f"**[UI COMPONENTS DEBUG] START of render_add_files_tab for shop_id={shop_id}**",
-            unsafe_allow_html=True
-        )
         st.markdown('**Add Files to Shop**')
         with st.container():
             render_add_file_form(shop_id)
-        
-        # VISUAL DEBUG MARKER: Add a visible marker at the end
-        st.markdown(
-            f"**[UI COMPONENTS DEBUG] END of render_add_files_tab for shop_id={shop_id}**",
-            unsafe_allow_html=True
-        )
 
 
 def render_account_tab(shop_id: int, account_id: int, account_name: str, account_tabs, tab_index: int) -> None:
@@ -186,9 +246,7 @@ def render_account_tab(shop_id: int, account_id: int, account_name: str, account
         with grid_view:
             # Display all files without pagination (no session state)
             files_per_row = 2
-            files_df, total_count = get_files_for_shop_account_paginated(
-                shop_id, account_id, page_size=1000, offset=0
-            )
+            files_df = get_files_for_shop_account(shop_id, account_id)
             
             # Display image previews - 2 files per row
             if not files_df.empty:
@@ -198,8 +256,13 @@ def render_account_tab(shop_id: int, account_id: int, account_name: str, account
                     # Create columns for this row
                     cols = st.columns(files_per_row)
                     
+                    # Track actual column index within this chunk
+                    local_col_idx = 0
                     for col_idx, row in chunk.iterrows():
-                        with cols[col_idx]:
+                        with cols[local_col_idx]:
+                            local_col_idx += 1
+                            if local_col_idx >= files_per_row:
+                                break
                             with st.container(border=True):
                                 st.markdown(f"**{row['filename']}**")
                                 st.caption(account_name)
@@ -217,7 +280,7 @@ def render_account_tab(shop_id: int, account_id: int, account_name: str, account
             else:
                 st.info("No files linked to this account yet.")
             
-            st.caption(f"Total: {total_count} files")
+            st.caption(f"Total: {len(files_df)} files")
 
 
 def render_account_files_table(shop_id: int, account_id: int, account_name: str) -> None:
@@ -235,9 +298,7 @@ def render_account_files_table(shop_id: int, account_id: int, account_name: str)
     search_query = st.text_input("🔍 Search files by name:", key=f"search_{account_id}_{shop_id}")
     
     # Get files for this shop-account combination
-    files_df, total_count = get_files_for_shop_account_paginated(
-        shop_id, account_id, page_size=1000, offset=0
-    )
+    files_df = get_files_for_shop_account(shop_id, account_id)
     
     # Filter files by search query
     if search_query:
@@ -246,7 +307,7 @@ def render_account_files_table(shop_id: int, account_id: int, account_name: str)
         filtered_df = files_df
     
     if not filtered_df.empty:
-        st.markdown(f"**Total files linked:** {total_count} | **Showing:** {len(filtered_df)}")
+        st.markdown(f"**Total files linked:** {len(files_df)} | **Showing:** {len(filtered_df)}")
         
         # Display table with columns: Preview, Filename, File ID, Actions
         for _, row in filtered_df.iterrows():
@@ -300,83 +361,52 @@ def render_account_file_row(file_data: dict, shop_id: int, account_id: int) -> N
                 st.error(f"Error: {e}")
 
 
-def render_shop_selector(shops_df: pd.DataFrame) -> tuple:
+def render_shop_selector(shops_df: pd.DataFrame):
     """
-    Render tabs to choose a shop with nested account tabs for each shop.
+    Render tabs to choose a shop with nested account tabs.
     
     Parameters:
         shops_df: DataFrame with shop_id and shop_name columns
         
     Returns:
-        tuple: (shop_list, shop_tabs) where shop_list is a list of (shop_name, shop_id) tuples
-               and shop_tabs is the Streamlit tabs object for shops
+        tuple: (shop_list, tabs) - List of (shop_name, shop_id) tuples and tabs object
     """
-    if shops_df.empty:
-        st.warning("No shops available. Add a shop first.")
-        return [], None
+    # Create tabs for each shop
+    shop_tabs = st.tabs([f"🏪 {row['shop_name']}" for _, row in shops_df.iterrows()])
     
-    # Create list of (shop_name, shop_id) tuples
-    shop_list = [
-        (row['shop_name'], row['shop_id'])
-        for _, row in shops_df.iterrows()
-    ]
+    shop_list = []
+    account_tabs_list = []
     
-    # Create tabs for each shop dynamically
-    tab_labels = [shop_name for shop_name, _ in shop_list]
-    shop_tabs = st.tabs(tab_labels)
+    for idx, (_, row) in enumerate(shops_df.iterrows()):
+        shop_id = row['shop_id']
+        shop_name = row['shop_name']
+        shop_list.append((shop_name, shop_id))
+        
+        with shop_tabs[idx]:
+            # Get accounts for this shop
+            accounts_df = get_accounts_for_shop(shop_id)
+            
+            # Create account tabs with Overview as first tab
+            if not accounts_df.empty:
+                account_tab_names = [f"👤 {row['account_name']}" for _, row in accounts_df.iterrows()]
+                account_tab_names.insert(0, "📁 Add Files")
+                account_tab_names.insert(0, "📊 Overview")
+                account_tabs = st.tabs(account_tab_names)
+            else:
+                account_tabs = st.tabs(["📊 Overview", "📁 Add Files"])
+            
+            account_tabs_list.append(account_tabs)
+            
+            # Render Overview tab
+            render_overview_tab(shop_id, account_tabs, tab_index=0, shops_df=shops_df)
+            
+            # Render Add Files tab
+            render_add_files_tab(shop_id, account_tabs, tab_index=1)
+            
+            # Render account tabs (shifted by 2 indices)
+            for acc_idx, (_, acc_row) in enumerate(accounts_df.iterrows()):
+                acc_id = acc_row['account_id']
+                acc_name = acc_row['account_name']
+                render_account_tab(shop_id, acc_id, acc_name, account_tabs, tab_index=acc_idx + 2)
     
-    if shop_list:
-        # Iterate through each shop tab
-        for idx, (shop_name, shop_id) in enumerate(shop_list):
-            with shop_tabs[idx]:
-                # Get accounts for this shop
-                accounts_df = get_accounts_for_shop(shop_id)
-                
-                # Display accounts table
-                if not accounts_df.empty:
-                    
-                    # Create sub-tabs for each account + "All files" tab + "Add Files" tab
-                    account_tab_names = accounts_df['account_name'].to_list()
-                    all_account_tab_names = ['All files', 'Add Files'] + account_tab_names
-                    account_tabs = st.tabs(all_account_tab_names)
-                    
-                    # First tab: All files for this shop
-                    with account_tabs[0]:
-                        st.markdown(f'**All Files from {shop_name}**')
-                        files_df, _ = get_files_for_shop(shop_id, page_size=10000, offset=0)
-                        if not files_df.empty:
-                            # Get account names for display
-                            account_ids = files_df['account_id'].dropna().unique().tolist()
-                            account_names_df = get_accounts_for_shop(shop_id)
-                            account_id_to_name = dict(zip(account_names_df['account_id'], account_names_df['account_name']))
-                            
-                            # Add account name column
-                            files_df_display = files_df.copy()
-                            files_df_display['account_name'] = files_df_display['account_id'].map(
-                                lambda x: account_id_to_name.get(x, 'N/A') if pd.notna(x) else 'N/A'
-                            )
-                            
-                            # Display table with file_id, filename, and account_name
-                            st.table(files_df_display[['file_id', 'filename', 'account_name']])
-                        else:
-                            st.info("No files linked to this shop yet.")
-                    
-                    # Second tab: Add Files for this shop
-                    with account_tabs[1]:
-                        st.markdown(f'**Add Files to {shop_name}**')
-                        render_add_file_form(shop_id)
-                    
-                    # Create sub-tabs for each account linked to the shop
-                    # Always render account tabs - Streamlit handles visibility
-                    # Note: account_tabs[0] = 'All files', account_tabs[1] = 'Add Files'
-                    # So accounts start at index 2
-                    for acc_idx, account_name in enumerate(account_tab_names):
-                        account_id = accounts_df.iloc[acc_idx]['account_id']
-                        render_account_tab(shop_id, account_id, account_name, account_tabs, tab_index=acc_idx + 2)
-                else:
-                    st.info("No accounts linked to this shop yet.")
-    
-    return shop_list, shop_tabs
-
-
-# Note: show_file_selection_modal is now imported from forms.file_form
+    return shop_list, account_tabs_list
