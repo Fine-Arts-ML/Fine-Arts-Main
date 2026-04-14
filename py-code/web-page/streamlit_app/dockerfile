@@ -8,10 +8,15 @@ COPY . .
 
 # Install the required dependencies
 RUN pip install --no-cache-dir -r requirements.txt 
+RUN python -m nltk.downloader stopwords
+RUN python -m nltk.downloader wordnet
+
 # Expose port 8501 for Streamlit
 EXPOSE 8501
+EXPOSE 5432
+
 
 # Command to run the app
 CMD ["streamlit", "run", "main.py"]
 
-ENTRYPOINT ["streamlit", "run", "streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+ENTRYPOINT ["streamlit", "run", "main.py", "--server.port=8501", "--server.address=0.0.0.0"]

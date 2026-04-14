@@ -12,6 +12,7 @@ except:
     print('failed to load spacy lemmatizer')
     print('stopping execution')
     sleep(10)
+
 try:
     stop_words = set(stopwords.words('english'))
     stop_words.update(['art','color','colorcomposition'])
@@ -19,6 +20,7 @@ except:
     print('failed to load nltk stopwords')
     print('stopping execution')
     sleep(10)
+
 
 def modulate_search_phrase(input_str):
     input_str = re.sub('[^A-Za-z0-9]+', ' ', input_str)

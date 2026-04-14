@@ -14,7 +14,8 @@ def create_db_connection():
     DB_NAME = os.getenv("DB_NAME")
     DB_USER = os.getenv("DB_USER")
     DB_PASSWORD = os.getenv("DB_PASSWORD")
-    engine = create_engine('postgresql+pg8000://'+DB_USER+':'+DB_PASSWORD+'@'+DB_HOST+':5432/'+DB_NAME)
+    engine = create_engine(f'''postgresql+pg8000://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:5432/{DB_NAME}''')
+    
     return engine
 
 def get_file_ids_of_tagged_images():
