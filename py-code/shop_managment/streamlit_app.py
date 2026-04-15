@@ -6,7 +6,7 @@ This app allows users to manage shops and their linked files from the database.
 
 import streamlit as st
 from db_handler import get_all_shops, get_all_accounts, get_files_for_shop, unlink_file_from_account
-from ui_components import render_shop_selector, render_files_view
+from ui_components import render_shop_selector
 
 
 def main():

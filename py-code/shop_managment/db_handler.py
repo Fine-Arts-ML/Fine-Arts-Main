@@ -5,8 +5,8 @@ Provides functions for database connections and queries.
 
 import os
 from dotenv import load_dotenv
-from sqlalchemy import create_engine, MetaData, Table, select, insert, delete, update, func
-from sqlalchemy.types import Integer
+from sqlalchemy import create_engine, MetaData, Table, select, insert, delete, update, func, cast
+from sqlalchemy.types import Integer, String
 import pandas as pd
 import requests
 from requests.auth import HTTPBasicAuth
@@ -687,8 +687,11 @@ def get_files_for_shop(shop_id: int) -> pd.DataFrame:
         shop_id (int): ID of the shop
         
     Returns:
-        pandas.DataFrame: DataFrame with file_id, filename, account_name, and preview_url columns
+        pandas.DataFrame: DataFrame with file_id, filename, account_name, preview_url, and display_name columns
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     engine = create_db_connection()
     metadata = MetaData()
     
@@ -697,34 +700,77 @@ def get_files_for_shop(shop_id: int) -> pd.DataFrame:
     bre_advance_index = Table('bre_advance_index', metadata, autoload_with=engine)
     bre_shop_account_matrix = Table('bre_shop_account_matrix', metadata, autoload_with=engine)
     bre_shop_account = Table('bre_shop_account', metadata, autoload_with=engine)
+    bre_display_name_index = Table('bre_display_name_index', metadata, autoload_with=engine)
+    bre_display_names = Table('bre_display_names', metadata, autoload_with=engine)
+    
+    # Get column references for file_id in bre_display_name_index (handle both file_id and fileid)
+    if 'file_id' in bre_display_name_index.c:
+        index_file_id_col = bre_display_name_index.c.file_id
+    elif 'fileid' in bre_display_name_index.c:
+        index_file_id_col = bre_display_name_index.c.fileid
+    else:
+        index_file_id_col = list(bre_display_name_index.c.keys())[3]  # 4th column (after display_name_id, shop_id, account_id)
+    
+    # Get column references for file_id in bre_display_names (handle both file_id and fileid)
+    if 'file_id' in bre_display_names.c:
+        display_names_file_id_col = bre_display_names.c.file_id
+    elif 'fileid' in bre_display_names.c:
+        display_names_file_id_col = bre_display_names.c.fileid
+    else:
+        # Fallback: find the column that is not display_name_id or display_name
+        for col_name in bre_display_names.c.keys():
+            if col_name not in ['display_name_id', 'display_name']:
+                display_names_file_id_col = bre_display_names.c[col_name]
+                break
+        else:
+            display_names_file_id_col = bre_display_names.c.display_name_id
     
     # Query files for the shop - join bre_account_index with bre_advance_index and bre_shop_account_matrix
+    # Add display_name by joining with bre_display_name_index and bre_display_names
+    # The bre_display_name_index now has file_id column, so we can join directly on file_id
     query = select(
         bre_account_index.c.file_id.label('file_id'),
         bre_advance_index.c.name.label('filename'),
         bre_advance_index.c.preview_url.label('preview_url'),
-        bre_shop_account.c.account_name.label('account_name')
+        bre_shop_account.c.account_name.label('account_name'),
+        bre_display_names.c.display_name.label('display_name')
     ).join(
         bre_advance_index,
-        bre_advance_index.c.fileid.cast(Integer) == bre_account_index.c.file_id.cast(Integer)
+        cast(bre_advance_index.c.fileid, Integer) == cast(bre_account_index.c.file_id, Integer)
     ).join(
         bre_shop_account_matrix,
         bre_shop_account_matrix.c.account_id == bre_account_index.c.account_id
     ).join(
         bre_shop_account,
         bre_shop_account.c.account_id == bre_account_index.c.account_id
+    ).join(
+        bre_display_name_index,
+        (bre_display_name_index.c.account_id == bre_account_index.c.account_id) &
+        (cast(index_file_id_col, Integer) == cast(bre_account_index.c.file_id, Integer)),
+        isouter=True
+    ).join(
+        bre_display_names,
+        bre_display_names.c.display_name_id == bre_display_name_index.c.display_name_id,
+        isouter=True
     ).where(
         bre_shop_account_matrix.c.shop_id == shop_id
     )
+    
+    logger.debug(f"=== get_files_for_shop DEBUG ===")
+    logger.debug(f"shop_id: {shop_id}")
+    logger.debug(f"Query: {query}")
     
     with engine.begin() as connection:
         result = connection.execute(query)
         rows = result.fetchall()
     
+    logger.debug(f"Rows returned: {len(rows)}")
     if rows:
-        df = pd.DataFrame(rows, columns=['file_id', 'filename', 'preview_url', 'account_name'])
+        df = pd.DataFrame(rows, columns=['file_id', 'filename', 'preview_url', 'account_name', 'display_name'])
+        logger.debug(f"DataFrame columns: {df.columns.tolist()}")
+        logger.debug(f"First row display_name: {df.iloc[0]['display_name'] if len(df) > 0 else 'N/A'}")
     else:
-        df = pd.DataFrame(columns=['file_id', 'filename', 'preview_url', 'account_name'])
+        df = pd.DataFrame(columns=['file_id', 'filename', 'preview_url', 'account_name', 'display_name'])
     
     return df
 
@@ -1110,3 +1156,613 @@ def get_preview_image(file_id: int, preview_url: str, db_host: str = None) -> Im
     except Exception as e:
         print(f"Error downloading file {file_id}: {e}")
         return None
+
+
+# ============================================================================
+# DISPLAY NAME CRUD FUNCTIONS
+# ============================================================================
+
+
+def add_display_name(display_name: str) -> int:
+    """
+    Add a new display name to bre_display_names table.
+    
+    Parameters:
+        display_name (str): The display name value
+        
+    Returns:
+        int: The display_name_id of the newly added display name
+    """
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the table
+    bre_display_names = Table('bre_display_names', metadata, autoload_with=engine)
+    
+    with engine.begin() as connection:
+        # Get max ID
+        result = connection.execute(select(func.max(bre_display_names.c.display_name_id)))
+        max_id = result.scalar() or 0
+        
+        # Check if display name already exists
+        result = connection.execute(
+            select(bre_display_names.c.display_name_id).where(
+                bre_display_names.c['display_name'] == display_name
+            )
+        )
+        existing = result.scalar()
+        
+        if existing:
+            return existing
+        
+        # Find the smallest available ID (reuse gaps)
+        result = connection.execute(select(bre_display_names.c.display_name_id))
+        existing_ids = set(row[0] for row in result.fetchall())
+        
+        new_id = 1
+        while new_id in existing_ids:
+            new_id += 1
+        
+        if new_id > max_id:
+            new_id = max_id + 1
+        
+        # Insert new display name
+        connection.execute(
+            insert(bre_display_names).values(display_name_id=new_id, display_name=display_name)
+        )
+        return new_id
+
+
+def get_all_display_names() -> pd.DataFrame:
+    """
+    Fetch all display names from bre_display_names table.
+    
+    Returns:
+        pandas.DataFrame: DataFrame with display_name_id, file_id, and display_name columns
+    """
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the table
+    bre_display_names = Table('bre_display_names', metadata, autoload_with=engine)
+    
+    # Get column references - handle both file_id and fileid column names
+    if 'file_id' in bre_display_names.c:
+        file_id_col = bre_display_names.c.file_id
+    elif 'fileid' in bre_display_names.c:
+        file_id_col = bre_display_names.c.fileid
+    else:
+        file_id_col = list(bre_display_names.c.keys())[1]  # Fallback
+    
+    query = select(
+        bre_display_names.c.display_name_id.label('display_name_id'),
+        file_id_col.label('file_id'),
+        bre_display_names.c.display_name.label('display_name')
+    )
+    
+    with engine.begin() as connection:
+        result = connection.execute(query).fetchall()
+        if result:
+            df = pd.DataFrame(result, columns=['display_name_id', 'file_id', 'display_name'])
+        else:
+            df = pd.DataFrame(columns=['display_name_id', 'file_id', 'display_name'])
+        return df
+
+
+def add_display_name_to_file(display_name: str, file_id: str) -> int:
+    """
+    Add a new display name to bre_display_names table and link it to a file.
+    
+    Parameters:
+        display_name (str): The display name value
+        file_id (str): ID of the file to link the display name to
+        
+    Returns:
+        int: The display_name_id of the newly added display name
+    """
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the table
+    bre_display_names = Table('bre_display_names', metadata, autoload_with=engine)
+    
+    # Get column references - handle both file_id and fileid column names
+    if 'file_id' in bre_display_names.c:
+        file_id_col = bre_display_names.c.file_id
+        file_id_col_name = 'file_id'
+    elif 'fileid' in bre_display_names.c:
+        file_id_col = bre_display_names.c.fileid
+        file_id_col_name = 'fileid'
+    else:
+        file_id_col = list(bre_display_names.c.keys())[1]  # Fallback
+        file_id_col_name = file_id_col if isinstance(file_id_col, str) else file_id_col.name
+    
+    with engine.begin() as connection:
+        # Get max ID
+        result = connection.execute(select(func.max(bre_display_names.c.display_name_id)))
+        max_id = result.scalar() or 0
+        
+        # Check if display name already exists for this file
+        result = connection.execute(
+            select(bre_display_names.c.display_name_id).where(
+                file_id_col == file_id,
+                bre_display_names.c['display_name'] == display_name
+            )
+        )
+        existing = result.scalar()
+        
+        if existing:
+            return existing
+        
+        # Find the smallest available ID (reuse gaps)
+        result = connection.execute(select(bre_display_names.c.display_name_id))
+        existing_ids = set(row[0] for row in result.fetchall())
+        
+        new_id = 1
+        while new_id in existing_ids:
+            new_id += 1
+        
+        if new_id > max_id:
+            new_id = max_id + 1
+        
+        # Use the correct column name for the database
+        values = {'display_name_id': new_id, file_id_col_name: file_id, 'display_name': display_name}
+        connection.execute(insert(bre_display_names).values(**values))
+        return new_id
+
+
+def remove_display_name(display_name_id: int) -> bool:
+    """
+    Remove a display name from bre_display_names table.
+    
+    Parameters:
+        display_name_id (int): ID of the display name to remove
+        
+    Returns:
+        bool: True if display name was removed, False if not found
+    """
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the table
+    bre_display_names = Table('bre_display_names', metadata, autoload_with=engine)
+    
+    with engine.begin() as connection:
+        result = connection.execute(
+            delete(bre_display_names).where(
+                bre_display_names.c.display_name_id == display_name_id
+            )
+        )
+        return result.rowcount > 0
+
+
+def update_display_name(display_name_id: int, new_display_name: str) -> bool:
+    """
+    Update a display name's value in bre_display_names table.
+    
+    Parameters:
+        display_name_id (int): ID of the display name to update
+        new_display_name (str): New display name value
+        
+    Returns:
+        bool: True if display name was updated, False if not found
+    """
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the table
+    bre_display_names = Table('bre_display_names', metadata, autoload_with=engine)
+    
+    with engine.begin() as connection:
+        result = connection.execute(
+            update(bre_display_names).where(
+                bre_display_names.c.display_name_id == display_name_id
+            ).values(display_name=new_display_name)
+        )
+        return result.rowcount > 0
+
+
+def link_display_name_to_shop_account(display_name_id: int, shop_id: int, account_id: int, file_id: str) -> bool:
+    """
+    Link a display name to a specific shop, account, and file combination.
+    
+    Parameters:
+        display_name_id (int): ID of the display name
+        shop_id (int): ID of the shop
+        account_id (int): ID of the account
+        file_id (str): ID of the file to link the display name to
+        
+    Returns:
+        bool: True if linked successfully, False otherwise
+    """
+
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the matching tables
+    bre_display_name_index = Table('bre_display_name_index', metadata, autoload_with=engine)
+    
+    # Get column reference for file_id in bre_display_name_index (handle both file_id and fileid)
+    if 'file_id' in bre_display_name_index.c:
+        index_file_id_col = bre_display_name_index.c.file_id
+        file_id_col_name = 'file_id'
+    elif 'fileid' in bre_display_name_index.c:
+        index_file_id_col = bre_display_name_index.c.fileid
+        file_id_col_name = 'fileid'
+    else:
+        # Fallback: find the column that is not display_name_id, shop_id, or account_id
+        for col_name in bre_display_name_index.c.keys():
+            if col_name not in ['display_name_id', 'shop_id', 'account_id']:
+                index_file_id_col = bre_display_name_index.c[col_name]
+                file_id_col_name = col_name
+                break
+        else:
+            index_file_id_col = list(bre_display_name_index.c.keys())[3]  # 4th column
+            file_id_col_name = list(bre_display_name_index.c.keys())[3]
+
+    with engine.begin() as connection:
+        # Check if already linked (including file_id)
+        check_query = select(bre_display_name_index.c.display_name_id).where(
+            bre_display_name_index.c.display_name_id == display_name_id,
+            bre_display_name_index.c.shop_id == shop_id,
+            bre_display_name_index.c.account_id == account_id,
+            cast(index_file_id_col, String) == str(file_id)
+        )
+        
+        result = connection.execute(check_query)
+        existing = result.scalar()
+        
+        # If already linked, return False
+        if existing:
+            return False
+        
+        # Prepare values for insert - ALWAYS include file_id
+        values = {
+            'display_name_id': display_name_id,
+            'shop_id': shop_id,
+            'account_id': account_id,
+            file_id_col_name: str(file_id)
+        }
+        
+        # Link display name to shop, account, and file
+        connection.execute(
+            insert(bre_display_name_index).values(values)
+        )
+        # engine.begin() handles commit automatically
+
+        return True
+
+
+def remove_display_name_from_shop_account(display_name_id: int, shop_id: int, account_id: int) -> bool:
+    """
+    Remove a display name link from a specific shop and account.
+    
+    Parameters:
+        display_name_id (int): ID of the display name
+        shop_id (int): ID of the shop
+        account_id (int): ID of the account
+        
+    Returns:
+        bool: True if removed, False if not found
+    """
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the table
+    bre_display_name_index = Table('bre_display_name_index', metadata, autoload_with=engine)
+    
+    with engine.begin() as connection:
+        result = connection.execute(
+            delete(bre_display_name_index).where(
+                bre_display_name_index.c.display_name_id == display_name_id,
+                bre_display_name_index.c.shop_id == shop_id,
+                bre_display_name_index.c.account_id == account_id
+            )
+        )
+        return result.rowcount > 0
+
+
+def remove_display_name_from_shop_file(display_name_id: int, shop_id: int, file_id: str) -> bool:
+    """
+    Remove a display name link from a specific shop and file.
+    
+    Parameters:
+        display_name_id (int): ID of the display name
+        shop_id (int): ID of the shop
+        file_id (str): ID of the file
+        
+    Returns:
+        bool: True if removed, False if not found
+    """
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the table
+    bre_display_name_index = Table('bre_display_name_index', metadata, autoload_with=engine)
+    
+    # Get column reference for file_id (handle both file_id and fileid)
+    if 'file_id' in bre_display_name_index.c:
+        file_id_col = bre_display_name_index.c.file_id
+    elif 'fileid' in bre_display_name_index.c:
+        file_id_col = bre_display_name_index.c.fileid
+    else:
+        # Fallback: find the column that is not display_name_id, shop_id, or account_id
+        for col_name in bre_display_name_index.c.keys():
+            if col_name not in ['display_name_id', 'shop_id', 'account_id']:
+                file_id_col = bre_display_name_index.c[col_name]
+                break
+        else:
+            file_id_col = list(bre_display_name_index.c.keys())[3]  # 4th column
+    
+    with engine.begin() as connection:
+        result = connection.execute(
+            delete(bre_display_name_index).where(
+                bre_display_name_index.c.display_name_id == display_name_id,
+                bre_display_name_index.c.shop_id == shop_id,
+                cast(file_id_col, String) == str(file_id)
+            )
+        )
+        return result.rowcount > 0
+
+
+def get_display_names_for_file(file_id: str) -> pd.DataFrame:
+    """
+    Get all display names for a specific file.
+    
+    Parameters:
+        file_id (str): ID of the file
+        
+    Returns:
+        pandas.DataFrame: DataFrame with display_name_id and display_name columns
+    """
+    
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the table
+    bre_display_names = Table('bre_display_names', metadata, autoload_with=engine)
+    
+    # Get column references - handle both file_id and fileid column names
+    if 'file_id' in bre_display_names.c:
+        file_id_col = bre_display_names.c.file_id
+    elif 'fileid' in bre_display_names.c:
+        file_id_col = bre_display_names.c.fileid
+    else:
+        # Fallback: use first column that looks like a file reference
+        file_id_col = list(bre_display_names.c.keys())[1]  # Skip display_name_id
+    
+    
+    # Fix: Cast file_id to string instead of casting column to integer
+    # The database column is character varying (VARCHAR), so we compare strings
+    # Use explicit column selection to avoid unconsumed column errors
+    if hasattr(file_id_col, 'name'):
+        # file_id_col is a Column object
+        query = select(
+            bre_display_names.c.display_name_id.label('display_name_id'),
+            bre_display_names.c.display_name.label('display_name')
+        ).where(file_id_col == file_id)
+    else:
+        # file_id_col is a string (column name), use it directly
+        query = select(
+            bre_display_names.c.display_name_id.label('display_name_id'),
+            bre_display_names.c.display_name.label('display_name')
+        ).where(bre_display_names.c[file_id_col] == file_id)
+    
+
+    
+    with engine.begin() as connection:
+        result = connection.execute(query).fetchall()
+        if result:
+            # Create DataFrame with explicit columns to avoid unconsumed column errors
+            df = pd.DataFrame(result, columns=['display_name_id', 'display_name'])
+        else:
+            df = pd.DataFrame(columns=['display_name_id', 'display_name'])
+        return df
+
+
+def get_display_names_for_shop_account(shop_id: int, account_id: int) -> pd.DataFrame:
+    """
+    Get all display names linked to a specific shop and account.
+    
+    Parameters:
+        shop_id (int): ID of the shop
+        account_id (int): ID of the account
+        
+    Returns:
+        pandas.DataFrame: DataFrame with display_name_id, file_id, and display_name columns
+    """
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the tables
+    bre_display_name_index = Table('bre_display_name_index', metadata, autoload_with=engine)
+    bre_display_names = Table('bre_display_names', metadata, autoload_with=engine)
+    
+    # Get column references - handle both file_id and fileid column names
+    if 'file_id' in bre_display_names.c:
+        file_id_col = bre_display_names.c.file_id
+    elif 'fileid' in bre_display_names.c:
+        file_id_col = bre_display_names.c.fileid
+    else:
+        file_id_col = list(bre_display_names.c.keys())[1]  # Fallback
+    
+    query = select(
+        bre_display_names.c.display_name_id.label('display_name_id'),
+        file_id_col.label('file_id'),
+        bre_display_names.c.display_name.label('display_name')
+    ).join(
+        bre_display_names,
+        bre_display_name_index.c.display_name_id == bre_display_names.c.display_name_id
+    ).where(
+        bre_display_name_index.c.shop_id == shop_id,
+        bre_display_name_index.c.account_id == account_id
+    )
+    
+    with engine.begin() as connection:
+        result = connection.execute(query).fetchall()
+        if result:
+            df = pd.DataFrame(result, columns=['display_name_id', 'file_id', 'display_name'])
+        else:
+            df = pd.DataFrame(columns=['display_name_id', 'file_id', 'display_name'])
+        return df
+
+
+def get_display_names_for_file_in_shop(file_id: int, shop_id: int) -> pd.DataFrame:
+    """
+    Get all display names for a file within a specific shop.
+    
+    Parameters:
+        file_id (int): ID of the file
+        shop_id (int): ID of the shop
+        
+    Returns:
+        pandas.DataFrame: DataFrame with display_name_id, file_id, and display_name columns
+    """
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the tables
+    # Note: bre_display_names has columns: display_name_id, display_name
+    # Note: bre_display_name_index has columns: display_name_id, shop_id, account_id, file_id
+    bre_display_name_index = Table('bre_display_name_index', metadata, autoload_with=engine)
+    bre_display_names = Table('bre_display_names', metadata, autoload_with=engine)
+    
+    # Get column references from bre_display_name_index (where file_id actually exists)
+    if 'file_id' in bre_display_name_index.c:
+        index_file_id_col = bre_display_name_index.c.file_id
+    elif 'fileid' in bre_display_name_index.c:
+        index_file_id_col = bre_display_name_index.c.fileid
+    else:
+        raise ValueError("bre_display_name_index table missing file_id or fileid column")
+    
+    # Fix: Use index_file_id_col.label() since file_id is in bre_display_name_index, not bre_display_names
+    query = select(
+        bre_display_names.c.display_name_id.label('display_name_id'),
+        index_file_id_col.label('file_id'),
+        bre_display_names.c.display_name.label('display_name')
+    ).join(
+        bre_display_names,
+        bre_display_name_index.c.display_name_id == bre_display_names.c.display_name_id
+    ).where(
+        index_file_id_col == file_id,
+        bre_display_name_index.c.shop_id == shop_id
+    )
+    
+
+    
+    with engine.begin() as connection:
+        result = connection.execute(query).fetchall()
+        if result:
+            df = pd.DataFrame(result, columns=['display_name_id', 'file_id', 'display_name'])
+        else:
+            df = pd.DataFrame(columns=['display_name_id', 'file_id', 'display_name'])
+        return df
+
+
+def get_display_names_for_file_in_shop_account(file_id: int, shop_id: int, account_id: int) -> pd.DataFrame:
+    """
+    Get all display names for a file within a specific shop and account.
+    
+    Parameters:
+        file_id (int): ID of the file
+        shop_id (int): ID of the shop
+        account_id (int): ID of the account
+        
+    Returns:
+        pandas.DataFrame: DataFrame with display_name_id, file_id, and display_name columns
+    """
+
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the tables
+    bre_display_name_index = Table('bre_display_name_index', metadata, autoload_with=engine)
+    bre_display_names = Table('bre_display_names', metadata, autoload_with=engine)
+    
+    # Get column references - handle both file_id and fileid column names
+    if 'file_id' in bre_display_names.c:
+        file_id_col = bre_display_names.c.file_id
+    elif 'fileid' in bre_display_names.c:
+        file_id_col = bre_display_names.c.fileid
+    else:
+        file_id_col = list(bre_display_names.c.keys())[1]  # Fallback
+    
+    if 'file_id' in bre_display_name_index.c:
+        index_file_id_col = bre_display_name_index.c.file_id
+    elif 'fileid' in bre_display_name_index.c:
+        index_file_id_col = bre_display_name_index.c.fileid
+    else:
+        index_file_id_col = list(bre_display_name_index.c.keys())[1]  # Fallback
+    
+
+    
+    # Fix: Cast file_id to string instead of casting column to integer
+    query = select(
+        bre_display_names.c.display_name_id.label('display_name_id'),
+        file_id_col.label('file_id'),
+        bre_display_names.c.display_name.label('display_name')
+    ).join(
+        bre_display_names,
+        bre_display_name_index.c.display_name_id == bre_display_names.c.display_name_id
+    ).where(
+        index_file_id_col == file_id,
+        bre_display_name_index.c.shop_id == shop_id,
+        bre_display_name_index.c.account_id == account_id
+    )
+    
+    with engine.begin() as connection:
+        result = connection.execute(query).fetchall()
+        if result:
+            df = pd.DataFrame(result, columns=['display_name_id', 'file_id', 'display_name'])
+        else:
+            df = pd.DataFrame(columns=['display_name_id', 'file_id', 'display_name'])
+        return df
+
+
+def get_display_name_for_file(file_id: int, shop_id: int, account_id: int) -> str:
+    """
+    Get the display name for a specific file in a specific shop and account.
+    
+    Parameters:
+        file_id (int): ID of the file
+        shop_id (int): ID of the shop
+        account_id (int): ID of the account
+        
+    Returns:
+        str: Display name or empty string if not found
+    """
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the tables
+    bre_display_name_index = Table('bre_display_name_index', metadata, autoload_with=engine)
+    bre_display_names = Table('bre_display_names', metadata, autoload_with=engine)
+    
+    # Get column references from bre_display_name_index (where file_id actually exists)
+    if 'file_id' in bre_display_name_index.c:
+        index_file_id_col = bre_display_name_index.c.file_id
+    elif 'fileid' in bre_display_name_index.c:
+        index_file_id_col = bre_display_name_index.c.fileid
+    else:
+        return ""
+    
+    try:
+        query = select(
+            bre_display_names.c.display_name
+        ).join(
+            bre_display_names,
+            bre_display_name_index.c.display_name_id == bre_display_names.c.display_name_id
+        ).where(
+            index_file_id_col == file_id,
+            bre_display_name_index.c.shop_id == shop_id,
+            bre_display_name_index.c.account_id == account_id
+        )
+        
+        with engine.begin() as connection:
+            result = connection.execute(query).fetchone()
+            if result:
+                return result[0]
+            return ""
+    except Exception:
+        return ""
+
