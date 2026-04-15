@@ -11,7 +11,7 @@ from PIL import Image
 from db_handler import (
     get_files_for_shop, get_all_file_ids_with_info, get_all_hashes_from_db,
     get_preview_image, link_file_to_account, link_file_to_shop, link_account_to_shop,
-    get_all_shops, get_accounts_for_shop
+    get_all_shops, get_accounts_for_shop, get_accounts_for_file
 )
 from utils.constants import HASH_TYPES, IMAGE_RESIZE_1080
 
@@ -29,9 +29,10 @@ def render_file_select_expander(
 ) -> None:
     """
     Render a reusable select expander modal for file selection.
+    The shop is pre-selected from the tab context, only account selection is shown.
     
     Parameters:
-        shop_id: ID of the shop to add files to
+        shop_id: ID of the shop to add files to (pre-selected from tab context)
         selected_file: Dictionary containing file information (file_id, filename, preview_url, etc.)
         idx: Row index in the chunk (for unique keys)
         col_idx: Column index in the chunk (for unique keys)
@@ -50,33 +51,8 @@ def render_file_select_expander(
         full_preview_url = f"http://{{DB_HOST}}:8080{selected_file_data['preview_url'].replace('{prevsize}', 'x=200&y=200')}"
         st.image(full_preview_url, use_container_width=True)
     
-    # Get all shops
-    all_shops = get_all_shops()
-    
-    # Shop selector
-    shop_options = {f"{row['shop_name']} (ID: {row['shop_id']})": row['shop_id']
-                   for _, row in all_shops.iterrows()}
-    
-    # Use session state to persist selections
-    session_key_shop = f"selected_shop_{shop_id}_{idx}_{col_idx}{unique_key_suffix}"
-    if session_key_shop not in st.session_state:
-        st.session_state[session_key_shop] = list(shop_options.keys())[0] if shop_options else None
-    
-    selected_shop_name = st.selectbox(
-        "Select Shop:",
-        options=list(shop_options.keys()),
-        format_func=lambda x: x,
-        key=f"modal_shop_{shop_id}_{idx}_{col_idx}{unique_key_suffix}"
-    )
-    
-    # Update session state if selection changed
-    if selected_shop_name != st.session_state[session_key_shop]:
-        st.session_state[session_key_shop] = selected_shop_name
-    
-    selected_shop_id = shop_options[st.session_state[session_key_shop]]
-    
-    # Get accounts for selected shop
-    accounts_df = get_accounts_for_shop(selected_shop_id)
+    # Get accounts for the pre-selected shop
+    accounts_df = get_accounts_for_shop(shop_id)
     
     if not accounts_df.empty:
         account_options = {f"{row['account_name']} (ID: {row['account_id']})": row['account_id']
@@ -84,51 +60,70 @@ def render_file_select_expander(
         
         session_key_account = f"selected_account_{shop_id}_{idx}_{col_idx}{unique_key_suffix}"
         if session_key_account not in st.session_state:
-            st.session_state[session_key_account] = list(account_options.keys())[0] if account_options else None
+            st.session_state[session_key_account] = []
         
-        selected_account_name = st.selectbox(
-            "Select Account:",
+        selected_account_keys = st.multiselect(
+            "Select Account(s):",
             options=list(account_options.keys()),
-            format_func=lambda x: x,
+            default=st.session_state.get(session_key_account, []),
             key=f"modal_account_{shop_id}_{idx}_{col_idx}{unique_key_suffix}"
         )
         
         # Update session state if selection changed
-        if selected_account_name != st.session_state[session_key_account]:
-            st.session_state[session_key_account] = selected_account_name
+        if selected_account_keys != st.session_state.get(session_key_account, []):
+            st.session_state[session_key_account] = selected_account_keys
         
-        selected_account_id = account_options[st.session_state[session_key_account]]
+        selected_account_ids = [account_options[key] for key in selected_account_keys]
     else:
         st.warning("No accounts linked to this shop yet.")
-        selected_account_id = None
+        selected_account_ids = []
     
     # Action buttons
     btn_col1, btn_col2 = st.columns(2)
     with btn_col1:
         if st.button("Confirm", key=f"confirm_add_{shop_id}_{idx}_{col_idx}{unique_key_suffix}", type="primary"):
             try:
-                # Link file to shop
-                if link_file_to_shop(selected_file_data['file_id'], selected_shop_id):
-                    st.success(f"File linked to shop '{st.session_state[session_key_shop]}'")
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.debug(f"Confirm button clicked for shop_id={shop_id}, file_id={selected_file_data['file_id']}")
+                logger.debug(f"selected_file_data: {selected_file_data}")
+                logger.debug(f"selected_account_ids: {selected_account_ids}")
+                
+                # Link file to shop (using pre-selected shop_id)
+                shop_link_result = link_file_to_shop(selected_file_data['file_id'], shop_id)
+                logger.debug(f"link_file_to_shop result: {shop_link_result}")
+                
+                if shop_link_result:
+                    st.success(f"File linked to shop ID: {shop_id}")
                     
-                    # Link file to account if selected
-                    if selected_account_id:
-                        # Link account to shop
-                        link_account_to_shop(selected_shop_id, selected_account_id)
-                        st.success(f"Account linked to shop")
-                        
-                        # Link file to account
-                        if link_file_to_account(selected_file_data['file_id'], selected_account_id):
-                            st.success(f"File also linked to account '{st.session_state[session_key_account]}'")
-                        else:
-                            st.warning(f"File already linked to account")
+                    # Link file to selected accounts
+                    if len(selected_account_ids) > 0:
+                        for acc_id in selected_account_ids:
+                            # Link account to shop
+                            link_account_to_shop(shop_id, acc_id)
+                            st.success(f"Account linked to shop")
+                            
+                            # Link file to account
+                            account_link_result = link_file_to_account(selected_file_data['file_id'], acc_id)
+                            logger.debug(f"link_file_to_account result for {acc_id}: {account_link_result}")
+                            
+                            if account_link_result:
+                                acc_name = [k for k, v in account_options.items() if v == acc_id][0]
+                                st.success(f"File also linked to account '{acc_name}'")
+                            else:
+                                st.warning(f"File already linked to account")
+                    else:
+                        st.info("No accounts selected")
+                else:
+                    st.warning(f"File link to shop may have already existed or failed")
                 
                 # Clear selected file and selections
                 del st.session_state[f"selected_file_{shop_id}"]
-                del st.session_state[session_key_shop]
                 if session_key_account in st.session_state:
                     del st.session_state[session_key_account]
+                logger.debug("Session state cleared")
             except Exception as e:
+                logger.error(f"Error adding file: {e}")
                 st.error(f"Error adding file: {e}")
     
     with btn_col2:
@@ -136,8 +131,6 @@ def render_file_select_expander(
             # Clear selected file and selections
             if f"selected_file_{shop_id}" in st.session_state:
                 del st.session_state[f"selected_file_{shop_id}"]
-            if session_key_shop in st.session_state:
-                del st.session_state[session_key_shop]
             if session_key_account in st.session_state:
                 del st.session_state[session_key_account]
 
@@ -174,6 +167,9 @@ def render_text_search_files(shop_id: int, tab_context: str = None) -> None:
         shop_id: ID of the shop to add files to
         tab_context: Optional unique context identifier for the tab (e.g., tab index)
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     # Create unique key with tab context to avoid duplicate element keys
     unique_key_suffix = f"_{tab_context}" if tab_context else ""
     
@@ -188,13 +184,40 @@ def render_text_search_files(shop_id: int, tab_context: str = None) -> None:
         # Get all files with info
         all_files_df = get_all_file_ids_with_info()
         
+        # DEBUG: Log search query and total files
+        logger.debug(f"=== FILE SEARCH DEBUG ===")
+        logger.debug(f"Search query: '{search_query}'")
+        logger.debug(f"Search query (lower): '{search_query.lower()}'")
+        logger.debug(f"Total files in database: {len(all_files_df)}")
+        
+        # DEBUG: Log all filenames for debugging
+        logger.debug(f"All filenames in database:")
+        for _, row in all_files_df.iterrows():
+            logger.debug(f"  - '{row['filename']}' (file_id: {row['file_id']})")
+        
         # Filter by search query (case-insensitive)
         filtered_df = all_files_df[
             all_files_df['filename'].str.lower().str.contains(search_query.lower(), na=False)
         ]
         
-        # Filter out already linked files
-        filtered_df = filtered_df[~filtered_df['file_id'].isin(linked_ids)]
+        # DEBUG: Log filtered results
+        logger.debug(f"Filtered results count: {len(filtered_df)}")
+        if not filtered_df.empty:
+            for _, row in filtered_df.iterrows():
+                logger.debug(f"  MATCH: '{row['filename']}' (file_id: {row['file_id']})")
+        else:
+            logger.debug("  NO MATCHES FOUND")
+        
+        # DEBUG: Check for exact filename match
+        exact_match = all_files_df[all_files_df['filename'].str.lower() == search_query.lower()]
+        logger.debug(f"Exact match check: {len(exact_match)} results")
+        if not exact_match.empty:
+            for _, row in exact_match.iterrows():
+                logger.debug(f"  EXACT MATCH: '{row['filename']}' (file_id: {row['file_id']})")
+        
+        # DEBUG: Check for partial match with stripped whitespace
+        stripped_match = all_files_df[all_files_df['filename'].str.strip().str.lower().str.contains(search_query.lower(), na=False)]
+        logger.debug(f"Partial match with stripped whitespace: {len(stripped_match)} results")
         
         if not filtered_df.empty:
             # Limit to first 24 results
@@ -204,6 +227,10 @@ def render_text_search_files(shop_id: int, tab_context: str = None) -> None:
                 filtered_df = filtered_df.head(MAX_RESULTS)
             else:
                 st.write(f"Found {len(filtered_df)} matching files")
+            
+            # Get all accounts for this shop
+            accounts_df = get_accounts_for_shop(shop_id)
+            total_accounts = len(accounts_df)
             
             # Display files in rows
             for idx in range(0, len(filtered_df), 3):
@@ -228,24 +255,35 @@ def render_text_search_files(shop_id: int, tab_context: str = None) -> None:
                                 st.write("📄")
                             
                             # Filename
-                            # Extract just the filename without shop name
                             filename_display = row['filename'].split(' - ')[0] if ' - ' in row['filename'] else row['filename']
                             st.caption(filename_display)
                             
-                            # Select expander
-                            with st.expander("Select"):
-                                selected_file_data = {
-                                    'file_id': row['file_id'],
-                                    'filename': row['filename'],
-                                    'preview_url': row.get('preview_url', '')
-                                }
-                                render_file_select_expander(
-                                    shop_id=shop_id,
-                                    selected_file=selected_file_data,
-                                    idx=idx,
-                                    col_idx=col_idx,
-                                    unique_key_suffix=unique_key_suffix
-                                )
+                            # Check if file is already linked to all accounts for this shop
+                            file_id = row['file_id']
+                            linked_accounts_df = get_accounts_for_file(file_id)
+                            linked_account_ids = set(linked_accounts_df['account_id'].tolist()) if not linked_accounts_df.empty else set()
+                            shop_account_ids = set(accounts_df['account_id'].tolist())
+                            
+                            # Check if file is linked to all accounts in this shop
+                            is_linked_to_all = shop_account_ids.issubset(linked_account_ids)
+                            
+                            if is_linked_to_all and total_accounts > 0:
+                                st.info(f"✅ Already linked to all {total_accounts} account(s)")
+                            else:
+                                # Select expander
+                                with st.expander("Select"):
+                                    selected_file_data = {
+                                        'file_id': row['file_id'],
+                                        'filename': row['filename'],
+                                        'preview_url': row.get('preview_url', '')
+                                    }
+                                    render_file_select_expander(
+                                        shop_id=shop_id,
+                                        selected_file=selected_file_data,
+                                        idx=idx,
+                                        col_idx=col_idx,
+                                        unique_key_suffix=unique_key_suffix
+                                    )
         else:
             st.info("No matching files found.")
     else:

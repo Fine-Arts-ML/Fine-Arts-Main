@@ -3,6 +3,9 @@ UI Components for the Shop Management app.
 Provides reusable components for the Streamlit interface.
 """
 
+import base64
+import io
+import os
 import streamlit as st
 import pandas as pd
 from db_handler import (
@@ -76,8 +79,15 @@ def render_overview_tab(shop_id: int, account_tabs, tab_index: int, shops_df: pd
         tab_index: The index of this tab in the account_tabs list
         shops_df: DataFrame with shop_id and shop_name columns
     """
+    # Get shop name for display
+    shop_name = ""
+    if not shops_df.empty:
+        shop_row = shops_df[shops_df['shop_id'] == shop_id]
+        if not shop_row.empty:
+            shop_name = shop_row['shop_name'].values[0]
+    
     with account_tabs[tab_index]:
-        st.markdown("## Overview - All Files for Selected Shop")
+        st.markdown(f'''## Table View for all Files linked to {shop_name}''')
         
         # Get all files for the selected shop (shop_id is already known from the shop tab)
         try:
@@ -87,8 +97,59 @@ def render_overview_tab(shop_id: int, account_tabs, tab_index: int, shops_df: pd
                 st.markdown(f"**Total files:** {len(files_df)}")
                 
                 # Display files in a dataframe table
-                display_df = files_df[['file_id', 'filename', 'account_name', 'preview_url']].copy()
-                st.dataframe(display_df, use_container_width=True)
+                # Reorder columns: preview_url (leftmost), filename, display_name (placeholder), account_name, file_id
+                display_df = files_df[['preview_url', 'filename', 'account_name', 'file_id']].copy()
+                
+                # Add placeholder column for "Display Name"
+                display_df['display_name'] = ''
+                
+                # Reorder columns: Preview | File Name | Display Name | Account Name | File ID
+                display_df = display_df[['preview_url', 'filename', 'display_name', 'account_name', 'file_id']]
+                
+                # Convert preview URLs to base64-encoded images for display
+                def url_to_base64(preview_url):
+                    """Convert preview URL to base64 data URI for display in dataframe."""
+                    if not preview_url:
+                        return ""
+                    
+                    db_host = os.getenv("DB_HOST", "192.168.0.150")
+                    nc_acc = os.getenv("NC_ACC")
+                    nc_pass = os.getenv("NC_PASS")
+                    
+                    # Construct full preview URL with authentication
+                    full_url = f"http://{db_host}:8080{preview_url.replace('{prevsize}', 'x=100&y=100')}"
+                    
+                    try:
+                        response = requests.get(full_url, auth=HTTPBasicAuth(nc_acc, nc_pass))
+                        if response.status_code == 200:
+                            img_bytes = io.BytesIO(response.content)
+                            img_bytes.seek(0)
+                            img_base64 = base64.b64encode(img_bytes.read()).decode('utf-8')
+                            return f"data:image/jpeg;base64,{img_base64}"
+                        else:
+                            return ""
+                    except Exception:
+                        return ""
+                
+                # Import required modules
+                import requests
+                from requests.auth import HTTPBasicAuth
+                
+                # Convert URLs to base64 data URIs
+                display_df['preview_url'] = display_df['preview_url'].apply(url_to_base64)
+                
+                # Display with ImageColumn config for preview images
+                st.dataframe(
+                    display_df,
+                    use_container_width=True,
+                    column_config={
+                        "preview_url": st.column_config.ImageColumn(
+                            "Preview",
+                            help="File preview",
+                            width="100"
+                        )
+                    }
+                )
                 
                 # Add remove functionality
                 st.markdown("### Remove Files")
@@ -96,69 +157,78 @@ def render_overview_tab(shop_id: int, account_tabs, tab_index: int, shops_df: pd
                 # Create a selectbox to choose which file to remove
                 file_options = {f"{row['filename']} (ID: {row['file_id']})": row['file_id']
                                 for _, row in files_df.iterrows()}
+                colm1 ,colm2 = st.columns([2,1])
+                with colm1:
+                    selected_file_key = st.selectbox("Select file to remove", list(file_options.keys()), key=f"remove_{shop_id}")
                 
-                selected_file_key = st.selectbox("Select file to remove", list(file_options.keys()), key=f"remove_{shop_id}")
-                
-                if selected_file_key:
-                    file_id = file_options[selected_file_key]
-                    
-                    # Get account info for this file
-                    file_info = files_df[files_df['file_id'] == file_id].iloc[0]
-                    account_name = file_info['account_name']
-                    
-                    # Get all accounts linked to this file
-                    try:
-                        accounts_df = get_accounts_for_file(file_id)
-                        other_accounts = accounts_df[accounts_df['account_id'] != file_info['account_id']]
-                    except Exception:
-                        other_accounts = pd.DataFrame(columns=['account_id', 'account_name'])
-                    
-                    # Check if file is linked to this shop
-                    from db_handler import get_shop_for_file
-                    is_linked_to_shop = get_shop_for_file(file_id, shop_id)
-                    
-                    # Get shop name for display
-                    shop_name = ""
-                    if not shops_df.empty:
-                        shop_row = shops_df[shops_df['shop_id'] == shop_id]
-                        if not shop_row.empty:
-                            shop_name = shop_row['shop_name'].values[0]
-                    
-                    col1, col2 = st.columns([3, 1])
-                    with col1:
-                        st.info(f"Removing file '{selected_file_key}' from account '{account_name}'")
-                        if is_linked_to_shop and shop_name:
-                            delete_shop_link = st.checkbox(
-                                f"Also remove shop link (delete from {shop_name})",
-                                key=f"delete_shop_{file_id}_{shop_id}"
+                    if selected_file_key:
+                        file_id = file_options[selected_file_key]
+                        
+                        # Get all accounts linked to this file
+                        try:
+                            accounts_df = get_accounts_for_file(file_id)
+                        except Exception:
+                            accounts_df = pd.DataFrame(columns=['account_id', 'account_name'])
+                        
+                        # Check if file is linked to this shop
+                        from db_handler import get_shop_for_file
+                        is_linked_to_shop = get_shop_for_file(file_id, shop_id)
+                        
+                        # Display accounts linked to this file
+                        if not accounts_df.empty:
+                            # Create account selection options for multiselect
+                            account_options = {f"{row['account_name']} (ID: {row['account_id']})": row['account_id']
+                                            for _, row in accounts_df.iterrows()}
+                            
+                            # Use multiselect to allow multiple account selection
+                            selected_account_keys = st.multiselect(
+                                "Select account(s) to unlink file from:",
+                                options=list(account_options.keys()),
+                                key=f"remove_account_{file_id}_{shop_id}"
                             )
-                    with col2:
-                        if st.button("Remove", key=f"remove_{file_id}_{shop_id}"):
-                            try:
-                                # Unlink file from account
-                                success = unlink_file_from_account(file_id, account_id=file_id)
-                                if success:
-                                    # Check if file is still linked to other accounts
-                                    if not other_accounts.empty:
-                                        st.success(f"File '{selected_file_key}' removed from account '{account_name}'")
-                                        st.info(f"File is still linked to {len(other_accounts)} other account(s)")
-                                    else:
-                                        st.success(f"File '{selected_file_key}' removed from account '{account_name}'")
+                            
+                            selected_account_ids = [account_options[key] for key in selected_account_keys]
+                            
+                            # Determine if shop link should be removed
+                            # If all accounts are being removed, auto-remove shop link
+                            auto_remove_shop_link = (len(selected_account_ids) == len(accounts_df) and len(accounts_df) > 0)
+                            
+
+                            if is_linked_to_shop and shop_name:
+                                if auto_remove_shop_link:
+                                    st.caption(f"Shop link will be automatically removed (all {len(accounts_df)} account(s) selected)")
+                                    delete_shop_link = True
+                                else:
+                                    delete_shop_link = st.checkbox(
+                                        f"Also remove shop link (delete from {shop_name})",
+                                        key=f"delete_shop_{file_id}_{shop_id}"
+                                    )
+                    with colm2:
+                            st.space('small')
+                            if len(selected_account_ids) > 0 and st.button("Remove", key=f"remove_{file_id}_{shop_id}"):
+                                try:
+                                    # Unlink file from selected account(s)
+                                    for acc_id in selected_account_ids:
+                                        unlink_file_from_account(file_id, acc_id)
                                     
-                                    # Remove shop link if checkbox was checked
+                                    st.success(f"File '{selected_file_key}' removed from {len(selected_account_ids)} account(s)")
+                                    
+                                    # Remove shop link if checkbox was checked or auto-removed
                                     if is_linked_to_shop and delete_shop_link:
                                         from db_handler import unlink_file_from_shop
                                         shop_link_removed = unlink_file_from_shop(file_id, shop_id)
                                         if shop_link_removed:
-                                            st.success(f"File '{selected_file_key}' also removed from shop link")
+                                            if auto_remove_shop_link:
+                                                st.success(f"File '{selected_file_key}' also removed from shop link (auto-removed)")
+                                            else:
+                                                st.success(f"File '{selected_file_key}' also removed from shop link")
                                     
                                     # Refresh the dataframe
                                     files_df = get_files_for_shop(shop_id)
                                     st.rerun()
-                                else:
-                                    st.error("Failed to remove file")
-                            except Exception as e:
-                                st.error(f"Error removing file: {e}")
+                                except Exception as e:
+                                    st.error(f"Error removing file: {e}")
+
             else:
                 st.markdown("No files found for this shop.")
         except Exception as e:
@@ -225,80 +295,107 @@ def render_add_files_tab(shop_id: int, account_tabs, tab_index: int = 1) -> None
             render_add_file_form(shop_id)
 
 
-def render_account_tab(shop_id: int, account_id: int, account_name: str, account_tabs, tab_index: int) -> None:
+def render_account_tab(shop_id: int, shop_name: str, account_id: int, account_name: str, account_tabs, tab_index: int) -> None:
     """
     Render an account tab for a shop with table and grid views.
     
     Parameters:
         shop_id: ID of the shop
+        shop_name: Name of the shop
         account_id: ID of the account
         account_name: Name of the account
         account_tabs: The Streamlit tabs object for account tabs
         tab_index: The index of this account tab in the account_tabs list
     """
+    # Initialize pagination in session state
+    if f"page_{shop_id}_{account_id}" not in st.session_state:
+        st.session_state[f"page_{shop_id}_{account_id}"] = 0
+    
+    # Get total files
+    files_df = get_files_for_shop_account(shop_id, account_id)
+    total_files = len(files_df)
+    files_per_page = 20
+    
+    # Calculate total pages
+    total_pages = (total_files + files_per_page - 1) // files_per_page if total_files > 0 else 1
+    
+    # Ensure current page is within bounds
+    if st.session_state[f"page_{shop_id}_{account_id}"] >= total_pages:
+        st.session_state[f"page_{shop_id}_{account_id}"] = total_pages - 1
+    
     with account_tabs[tab_index]:
         # Create sub-tabs for view options
-        table_view, grid_view = st.tabs(["📋 Table View", "🖼️ Grid View"])
+        table_view, grid_view = st.tabs(["Files Table View", "Files Grid View"])
         
         with table_view:
-            render_account_files_table(shop_id, account_id, account_name)
+            render_account_files_table(shop_id, shop_name, account_id, account_name, files_df, total_files, files_per_page)
         
         with grid_view:
-            # Display all files without pagination (no session state)
-            files_per_row = 2
-            files_df = get_files_for_shop_account(shop_id, account_id)
+            # Get paginated files
+            start_idx = st.session_state[f"page_{shop_id}_{account_id}"] * files_per_page
+            end_idx = start_idx + files_per_page
+            paginated_df = files_df.iloc[start_idx:end_idx]
             
             # Display image previews - 2 files per row
-            if not files_df.empty:
-                for file_idx in range(0, len(files_df), files_per_row):
-                    chunk = files_df.iloc[file_idx:file_idx + files_per_row]
-                    
-                    # Create columns for this row
-                    cols = st.columns(files_per_row)
-                    
-                    # Track actual column index within this chunk
-                    local_col_idx = 0
-                    for col_idx, row in chunk.iterrows():
-                        with cols[local_col_idx]:
-                            local_col_idx += 1
-                            if local_col_idx >= files_per_row:
-                                break
-                            with st.container(border=True):
-                                st.markdown(f"**{row['filename']}**")
-                                st.caption(account_name)
-                                if row['preview_url'] and pd.notna(row['preview_url']):
-                                    img = get_preview_image(
-                                        file_id=row['file_id'],
-                                        preview_url=row['preview_url']
-                                    )
-                                    if img is not None:
-                                        st.image(img, width=1080)  # Grid view: 1080x1080
-                                    else:
-                                        st.write("Image not available")
+            if not paginated_df.empty:
+                # Create columns once for the grid
+                cols = st.columns(2)
+                
+                # Iterate through paginated files and distribute them across columns
+                for idx, row in paginated_df.iterrows():
+                    col_idx = idx % 2
+                    with cols[col_idx]:
+                        with st.container(border=True):
+                            st.markdown(f"**{row['filename']}**")
+                            st.caption(account_name)
+                            if row['preview_url'] and pd.notna(row['preview_url']):
+                                img = get_preview_image(
+                                    file_id=row['file_id'],
+                                    preview_url=row['preview_url']
+                                )
+                                if img is not None:
+                                    st.image(img, use_container_width=True)
                                 else:
-                                    st.write("No preview available")
+                                    st.write("Image not available")
+                            else:
+                                st.write("No preview available")
             else:
                 st.info("No files linked to this account yet.")
             
-            st.caption(f"Total: {len(files_df)} files")
+            st.caption(f"Total: {total_files} files")
+            
+            # Pagination controls
+            if total_pages > 1:
+                col1, col2, col3 = st.columns([1, 2, 1])
+                with col1:
+                    if st.button("◀️ Previous", key=f"prev_{shop_id}_{account_id}"):
+                        st.session_state[f"page_{shop_id}_{account_id}"] = max(0, st.session_state[f"page_{shop_id}_{account_id}"] - 1)
+                        st.rerun()
+                with col2:
+                    st.caption(f"Page {st.session_state[f'page_{shop_id}_{account_id}'] + 1} of {total_pages}")
+                with col3:
+                    if st.button("Next ▶️", key=f"next_{shop_id}_{account_id}"):
+                        st.session_state[f"page_{shop_id}_{account_id}"] = min(total_pages - 1, st.session_state[f"page_{shop_id}_{account_id}"] + 1)
+                        st.rerun()
 
 
-def render_account_files_table(shop_id: int, account_id: int, account_name: str) -> None:
+def render_account_files_table(shop_id: int, shop_name: str, account_id: int, account_name: str, files_df: pd.DataFrame, total_files: int, files_per_page: int = 20) -> None:
     """
-    Render a table view of files linked to an account for a specific shop.
+    Render a table view of files linked to an account for a specific shop with pagination.
     
     Parameters:
         shop_id: ID of the shop
+        shop_name: Name of the shop
         account_id: ID of the account
         account_name: Name of the account
+        files_df: DataFrame with all files for this shop-account combination
+        total_files: Total number of files
+        files_per_page: Number of files per page (default: 20)
     """
-    st.subheader(f"📋 Files for Account '{account_name}'")
-    
+  
+  
     # Search input for file names
     search_query = st.text_input("🔍 Search files by name:", key=f"search_{account_id}_{shop_id}")
-    
-    # Get files for this shop-account combination
-    files_df = get_files_for_shop_account(shop_id, account_id)
     
     # Filter files by search query
     if search_query:
@@ -306,12 +403,46 @@ def render_account_files_table(shop_id: int, account_id: int, account_name: str)
     else:
         filtered_df = files_df
     
-    if not filtered_df.empty:
-        st.markdown(f"**Total files linked:** {len(files_df)} | **Showing:** {len(filtered_df)}")
+    # Calculate pagination for filtered results
+    filtered_total = len(filtered_df)
+    filtered_pages = (filtered_total + files_per_page - 1) // files_per_page if filtered_total > 0 else 1
+    
+    # Initialize pagination in session state for filtered view
+    if f"filtered_page_{shop_id}_{account_id}" not in st.session_state:
+        st.session_state[f"filtered_page_{shop_id}_{account_id}"] = 0
+    
+    # Ensure current page is within bounds
+    if filtered_pages > 0 and st.session_state[f"filtered_page_{shop_id}_{account_id}"] >= filtered_pages:
+        st.session_state[f"filtered_page_{shop_id}_{account_id}"] = filtered_pages - 1
+    
+    # Get paginated filtered files
+    if search_query and filtered_total > 0:
+        start_idx = st.session_state[f"filtered_page_{shop_id}_{account_id}"] * files_per_page
+        end_idx = start_idx + files_per_page
+        paginated_filtered_df = filtered_df.iloc[start_idx:end_idx]
+    else:
+        paginated_filtered_df = filtered_df
+    
+    if not paginated_filtered_df.empty:
+        st.markdown(f"**Total files linked:** {total_files} | **Showing:** {filtered_total} | **Page:** {st.session_state.get(f'filtered_page_{shop_id}_{account_id}', 0) + 1 if search_query else 1} | **Shop:** {shop_name}")
         
         # Display table with columns: Preview, Filename, File ID, Actions
-        for _, row in filtered_df.iterrows():
+        for _, row in paginated_filtered_df.iterrows():
             render_account_file_row(row, shop_id, account_id)
+        
+        # Pagination controls for filtered view
+        if search_query and filtered_pages > 1:
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col1:
+                if st.button("◀️ Previous", key=f"prev_filtered_{shop_id}_{account_id}"):
+                    st.session_state[f"filtered_page_{shop_id}_{account_id}"] = max(0, st.session_state[f"filtered_page_{shop_id}_{account_id}"] - 1)
+                    st.rerun()
+            with col2:
+                st.caption(f"Page {st.session_state[f'filtered_page_{shop_id}_{account_id}'] + 1} of {filtered_pages}")
+            with col3:
+                if st.button("Next ▶️", key=f"next_filtered_{shop_id}_{account_id}"):
+                    st.session_state[f"filtered_page_{shop_id}_{account_id}"] = min(filtered_pages - 1, st.session_state[f"filtered_page_{shop_id}_{account_id}"] + 1)
+                    st.rerun()
         
     else:
         st.info(f"No files linked to account '{account_name}' for this shop." if not search_query else f"No files matching '{search_query}' found.")
@@ -352,11 +483,20 @@ def render_account_file_row(file_data: dict, shop_id: int, account_id: int) -> N
         # Remove from account button (include shop_id for uniqueness across shops)
         if st.button("🗑️", key=f"remove_from_acc_{shop_id}_{file_data['file_id']}_{account_id}"):
             try:
-                if unlink_file_from_account(file_data['file_id'], account_id):
+                from db_handler import unlink_file_from_account_with_shop_check
+                success, removed_from_shop, message = unlink_file_from_account_with_shop_check(
+                    file_data['file_id'], account_id, shop_id
+                )
+                
+                if success:
                     st.success(f"File removed from account")
+                    if removed_from_shop:
+                        st.success(f"File also removed from shop (no other accounts linked)")
+                    else:
+                        st.info(f"File still linked to other accounts in this shop")
                     st.rerun()
                 else:
-                    st.error("Failed to remove file from account")
+                    st.error(message)
             except Exception as e:
                 st.error(f"Error: {e}")
 
@@ -407,6 +547,6 @@ def render_shop_selector(shops_df: pd.DataFrame):
             for acc_idx, (_, acc_row) in enumerate(accounts_df.iterrows()):
                 acc_id = acc_row['account_id']
                 acc_name = acc_row['account_name']
-                render_account_tab(shop_id, acc_id, acc_name, account_tabs, tab_index=acc_idx + 2)
+                render_account_tab(shop_id, shop_name, acc_id, acc_name, account_tabs, tab_index=acc_idx + 2)
     
     return shop_list, account_tabs_list

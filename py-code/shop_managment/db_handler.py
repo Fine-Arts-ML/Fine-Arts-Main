@@ -282,11 +282,17 @@ def link_account_to_shop(shop_id: int, account_id: int) -> bool:
     Returns:
         bool: True if linked successfully, False otherwise
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     engine = create_db_connection()
     metadata = MetaData()
     
     # Reflect the new matching table
     bre_shop_account_matrix = Table('bre_shop_account_matrix', metadata, autoload_with=engine)
+    
+    logger.debug(f"Attempting to link account_id={account_id} to shop_id={shop_id}")
+    logger.debug(f"bre_shop_account_matrix columns: {list(bre_shop_account_matrix.c.keys())}")
     
     with engine.begin() as connection:
         # Check if already linked
@@ -297,14 +303,17 @@ def link_account_to_shop(shop_id: int, account_id: int) -> bool:
             )
         )
         existing = result.scalar()
+        logger.debug(f"Existing link check result: {existing}")
         
         if existing:
+            logger.debug("Account already linked to shop, returning True")
             return True
         
         # Link account to shop
         connection.execute(
             insert(bre_shop_account_matrix).values(shop_id=shop_id, account_id=account_id)
         )
+        logger.debug(f"Account linked to shop successfully")
         return True
 
 
@@ -346,11 +355,18 @@ def link_file_to_account(file_id: int, account_id: int) -> bool:
     Returns:
         bool: True if link was created, False if already exists or error
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     engine = create_db_connection()
     metadata = MetaData()
     
     # Reflect the table
     bre_account_index = Table('bre_account_index', metadata, autoload_with=engine)
+    
+    # Log table columns for debugging
+    logger.debug(f"bre_account_index columns: {list(bre_account_index.c.keys())}")
+    logger.debug(f"Attempting to link file_id={file_id} to account_id={account_id}")
     
     # Check if link already exists
     check_query = select(bre_account_index.c.file_id).where(
@@ -360,13 +376,16 @@ def link_file_to_account(file_id: int, account_id: int) -> bool:
     
     with engine.begin() as connection:
         existing = connection.execute(check_query).fetchone()
+        logger.debug(f"Existing link check result: {existing}")
         if existing:
+            logger.debug("Link already exists, returning False")
             return False
         
         # Insert new link
         result = connection.execute(
             insert(bre_account_index).values(file_id=file_id, account_id=account_id)
         )
+        logger.debug(f"Insert result rowcount: {result.rowcount}")
         return result.rowcount > 0
 
 
@@ -448,6 +467,132 @@ def get_shop_for_file(file_id: int, shop_id: int) -> bool:
     Returns:
         bool: True if file is linked to shop, False otherwise
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the table
+    bre_shops_index = Table('bre_shops_index', metadata, autoload_with=engine)
+    
+    query = select(bre_shops_index.c.id).where(
+        bre_shops_index.c.id == file_id,
+        bre_shops_index.c.shop_id == shop_id
+    )
+    
+    with engine.begin() as connection:
+        result = connection.execute(query).fetchone()
+        is_linked = result is not None
+        logger.debug(f"File {file_id} linked to shop {shop_id}: {is_linked}")
+        return is_linked
+
+
+def get_accounts_for_file_in_shop(file_id: int, shop_id: int) -> pd.DataFrame:
+    """
+    Get all accounts that a specific file is linked to within a specific shop.
+    
+    Parameters:
+        file_id (int): ID of the file
+        shop_id (int): ID of the shop
+        
+    Returns:
+        pandas.DataFrame: DataFrame with account_id and account_name columns
+    """
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the tables
+    bre_account_index = Table('bre_account_index', metadata, autoload_with=engine)
+    bre_shop_account = Table('bre_shop_account', metadata, autoload_with=engine)
+    
+    # Query all accounts linked to this file within the shop
+    query = select(
+        bre_account_index.c.account_id,
+        bre_shop_account.c.account_name
+    ).join(
+        bre_shop_account,
+        bre_account_index.c.account_id == bre_shop_account.c.account_id
+    ).where(
+        bre_account_index.c.file_id == file_id
+    )
+    
+    with engine.begin() as connection:
+        result = connection.execute(query)
+        rows = result.fetchall()
+    
+    if rows:
+        df = pd.DataFrame(rows, columns=['account_id', 'account_name'])
+    else:
+        df = pd.DataFrame(columns=['account_id', 'account_name'])
+    return df
+
+
+def unlink_file_from_account_with_shop_check(file_id: int, account_id: int, shop_id: int) -> tuple:
+    """
+    Remove a file link from an account, and optionally from the shop if no other account has it.
+    
+    Parameters:
+        file_id (int): ID of the file to unlink
+        account_id (int): ID of the account to unlink from
+        shop_id (int): ID of the shop to check for other account links
+        
+    Returns:
+        tuple: (success: bool, removed_from_shop: bool, message: str)
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    engine = create_db_connection()
+    metadata = MetaData()
+    
+    # Reflect the tables
+    bre_account_index = Table('bre_account_index', metadata, autoload_with=engine)
+    bre_shops_index = Table('bre_shops_index', metadata, autoload_with=engine)
+    
+    with engine.begin() as connection:
+        # First, unlink from account
+        result = connection.execute(
+            delete(bre_account_index).where(
+                bre_account_index.c.file_id == file_id,
+                bre_account_index.c.account_id == account_id
+            )
+        )
+        account_unlinked = result.rowcount > 0
+        
+        if not account_unlinked:
+            logger.debug(f"File {file_id} not linked to account {account_id}")
+            return (False, False, "File not linked to this account")
+        
+        logger.debug(f"File {file_id} unlinked from account {account_id}")
+        
+        # Check if file is still linked to other accounts in this shop
+        other_accounts_query = select(bre_account_index.c.account_id).where(
+            bre_account_index.c.file_id == file_id,
+            bre_account_index.c.account_id != account_id
+        )
+        other_accounts = connection.execute(other_accounts_query).fetchall()
+        
+        # Check if file is linked to the shop
+        shop_link_query = select(bre_shops_index.c.id).where(
+            bre_shops_index.c.id == file_id,
+            bre_shops_index.c.shop_id == shop_id
+        )
+        shop_link = connection.execute(shop_link_query).fetchone()
+        
+        removed_from_shop = False
+        if shop_link and len(other_accounts) == 0:
+            # No other accounts have this file, remove from shop
+            delete_result = connection.execute(
+                delete(bre_shops_index).where(
+                    bre_shops_index.c.id == file_id,
+                    bre_shops_index.c.shop_id == shop_id
+                )
+            )
+            removed_from_shop = delete_result.rowcount > 0
+            logger.debug(f"File {file_id} removed from shop {shop_id} (no other accounts)")
+        
+        return (True, removed_from_shop, "File removed successfully")
     engine = create_db_connection()
     metadata = MetaData()
     
@@ -595,13 +740,21 @@ def link_file_to_shop(file_id: int, shop_id: int) -> bool:
     Returns:
         bool: True if link was created, False if already exists or error
     """
+    import logging
+    logging.basicConfig(level=logging.DEBUG)
+    logger = logging.getLogger(__name__)
+    
     engine = create_db_connection()
     metadata = MetaData()
     
     # Reflect the table
     bre_shops_index = Table('bre_shops_index', metadata, autoload_with=engine)
     
-    # Check if link already exists
+    # Log table columns for debugging
+    logger.debug(f"bre_shops_index columns: {list(bre_shops_index.c.keys())}")
+    logger.debug(f"Attempting to link file_id={file_id} to shop_id={shop_id}")
+    
+    # Check if link already exists - use file_id column instead of id
     check_query = select(bre_shops_index.c.id).where(
         bre_shops_index.c.id == file_id,
         bre_shops_index.c.shop_id == shop_id
@@ -609,13 +762,16 @@ def link_file_to_shop(file_id: int, shop_id: int) -> bool:
     
     with engine.begin() as connection:
         existing = connection.execute(check_query).fetchone()
+        logger.debug(f"Existing link check result: {existing}")
         if existing:
+            logger.debug("Link already exists, returning False")
             return False
         
         # Insert new link
         result = connection.execute(
             insert(bre_shops_index).values(id=file_id, shop_id=shop_id)
         )
+        logger.debug(f"Insert result rowcount: {result.rowcount}")
         return result.rowcount > 0
 
 
@@ -674,6 +830,9 @@ def get_all_file_ids_with_info() -> pd.DataFrame:
     Returns:
         pandas.DataFrame: DataFrame with file_id, filename, and preview_url columns
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     engine = create_db_connection()
     metadata = MetaData()
     
@@ -690,9 +849,17 @@ def get_all_file_ids_with_info() -> pd.DataFrame:
         result = connection.execute(query).fetchall()
         if result:
             df = pd.DataFrame(result, columns=['file_id', 'filename', 'preview_url'])
+            # DEBUG: Log all filenames from database
+            logger.debug(f"=== DATABASE QUERY DEBUG ===")
+            logger.debug(f"Total files returned from database: {len(df)}")
+            logger.debug(f"Database filenames:")
+            for _, row in df.iterrows():
+                logger.debug(f"  file_id={row['file_id']}, filename='{row['filename']}'")
+            return df
         else:
+            logger.debug("No files returned from database")
             df = pd.DataFrame(columns=['file_id', 'filename', 'preview_url'])
-        return df
+            return df
 
 
 def get_file_info(file_id: int) -> dict:
