@@ -19,55 +19,6 @@ from forms.file_form import render_add_file_form
 from utils.constants import HASH_TYPES
 
 
-def render_files_view(shop_id: int, tab_context: str = None, show_files: bool = True) -> None:
-    """
-    Render the files view for a shop.
-    
-    Parameters:
-        shop_id: ID of the shop
-        tab_context: Optional unique context identifier for the tab (e.g., tab index)
-        show_files: Whether to show the file listing (default True). Set to False for "Add files" tab.
-    """
-    from tables import render_files_table, render_infinite_scroll_file_list
-
-    # Display files container (only search form, no file listing)
-    if show_files:
-        # Get file count
-        try:
-            file_count = get_file_count_for_shop(shop_id)
-        except Exception:
-            file_count = 0
-        
-        st.subheader(f"📁 Files for Shop ID: {shop_id}")
-        st.markdown(f"**Total files linked:** {file_count}")
-        
-        with st.container(border=True):
-            # Header row
-            head_col1, head_col2, head_col3 = st.columns([3, 5, 1])
-            with head_col1:
-                st.markdown(f"**<div style='text-align: left;'>Preview</div>**", unsafe_allow_html=True)
-            with head_col2:
-                st.markdown(f"**<div style='text-align: left;'>Filename</div>**", unsafe_allow_html=True)
-            with head_col3:
-                st.markdown(f"**<div style='text-align: right;'>Actions</div>**", unsafe_allow_html=True)
-            
-            # Get files for this shop
-            try:
-                files_df = get_files_for_shop(shop_id)
-                
-                if not files_df.empty:
-                    for _, row in files_df.iterrows():
-                        file_data = {
-                            'file_id': row['file_id'],
-                            'filename': row['filename'],
-                            'preview_url': row.get('preview_url', '')
-                        }
-                        render_file_row(file_data, shop_id, is_infinite_scroll=False)
-                else:
-                    st.info(f"No files linked to this shop yet.")
-            except Exception as e:
-                st.error(f"Error loading files: {e}")
-
 
 def render_overview_tab(shop_id: int, account_tabs, tab_index: int, shops_df: pd.DataFrame) -> None:
     """
@@ -106,7 +57,7 @@ def render_overview_tab(shop_id: int, account_tabs, tab_index: int, shops_df: pd
                     if not preview_url:
                         return ""
                     
-                    db_host = os.getenv("DB_HOST", "192.168.0.150")
+                    db_host = os.getenv("DB_HOST")
                     nc_acc = os.getenv("NC_ACC")
                     nc_pass = os.getenv("NC_PASS")
                     
@@ -225,49 +176,6 @@ def render_overview_tab(shop_id: int, account_tabs, tab_index: int, shops_df: pd
             st.error(f"Error loading files: {e}")
 
 
-def render_file_row(file_data: dict, shop_id: int, is_infinite_scroll: bool = False, files_list: list = None) -> None:
-    """
-    Render a single file row with preview, filename, and delete button.
-    
-    Parameters:
-        file_data: File data containing file_id, filename, and preview_url
-        shop_id: ID of the shop
-        is_infinite_scroll: If True, use infinite scroll delete logic
-        files_list: Current files list for infinite scroll mode (for removal)
-    """
-    from db_handler import unlink_file_from_shop
-    
-    col1, col2, col3 = st.columns([3, 5, 1])
-    
-    with col1:
-        # Try to display preview
-        preview_url = file_data.get('preview_url', '')
-        if preview_url:
-            full_preview_url = f"http://{{DB_HOST}}:8080{preview_url.replace('{prevsize}', 'x=100&y=100')}"
-            st.image(full_preview_url, width='stretch')
-        else:
-            st.write("📄")
-    
-    with col2:
-        st.markdown(f"**{file_data['filename']}**")
-    
-    with col3:
-        key_suffix = "inf_" if is_infinite_scroll else "_"
-        if st.button("🗑️", key=f"remove_file{key_suffix}{file_data['file_id']}_{shop_id}"):
-            try:
-                if unlink_file_from_shop(file_data['file_id'], shop_id):
-                    if is_infinite_scroll and files_list is not None:
-                        # Remove from session state
-                        st.session_state[f"files_{shop_id}"] = [
-                            f for f in files_list if f['file_id'] != file_data['file_id']
-                        ]
-                        st.session_state[f"loaded_{shop_id}"] -= 1
-                    st.success("File removed")
-                    st.rerun()
-                else:
-                    st.error("Failed to remove file")
-            except Exception as e:
-                st.error(f"Error: {e}")
 
 
 def render_add_files_tab(shop_id: int, account_tabs, tab_index: int = 1) -> None:
@@ -393,13 +301,13 @@ def render_account_files_table(shop_id: int, shop_name: str, account_id: int, ac
         if search_query and filtered_pages > 1:
             col1, col2, col3 = st.columns([1, 2, 1])
             with col1:
-                if st.button("◀️ Previous", key=f"prev_filtered_{shop_id}_{account_id}"):
+                if st.button("◀️", key=f"prev_filtered_{shop_id}_{account_id}"):
                     st.session_state[f"filtered_page_{shop_id}_{account_id}"] = max(0, st.session_state[f"filtered_page_{shop_id}_{account_id}"] - 1)
                     st.rerun()
             with col2:
                 st.caption(f"Page {st.session_state[f'filtered_page_{shop_id}_{account_id}'] + 1} of {filtered_pages}")
             with col3:
-                if st.button("Next ▶️", key=f"next_filtered_{shop_id}_{account_id}"):
+                if st.button("▶️", key=f"next_filtered_{shop_id}_{account_id}"):
                     st.session_state[f"filtered_page_{shop_id}_{account_id}"] = min(filtered_pages - 1, st.session_state[f"filtered_page_{shop_id}_{account_id}"] + 1)
                     st.rerun()
         

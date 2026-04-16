@@ -19,7 +19,7 @@ from utils.constants import HASH_TYPES, IMAGE_RESIZE_1080
 
 # Load environment variables
 load_dotenv()
-DB_HOST = os.getenv("DB_HOST", "192.168.0.150")
+DB_HOST = os.getenv("DB_HOST")
 
 
 def render_file_select_expander(
@@ -53,6 +53,10 @@ def render_file_select_expander(
     if selected_file_data.get('preview_url'):
         full_preview_url = f"http://{{DB_HOST}}:8080{selected_file_data['preview_url'].replace('{prevsize}', 'x=200&y=200')}"
         st.image(full_preview_url, use_container_width=True)
+    
+    # Show "already linked" message if file is already linked to this shop
+    if selected_file_data.get('is_linked', False):
+        st.caption("✓ This file is already linked to this shop")
     
     # Get accounts for the pre-selected shop
     accounts_df = get_accounts_for_shop(shop_id)
@@ -434,12 +438,7 @@ def render_reverse_image_search(shop_id: int) -> None:
         shop_id: ID of the shop to add files to
     """
     # Import fingerprinting module
-    try:
-        from fingerprinting.hash_calc import compute_hashes, find_closest_matches
-    except ImportError:
-        import sys
-        sys.path.insert(0, '/Users/tom/Fine-arts-ML/Fine-Arts-Main/py-code')
-        from fingerprinting.hash_calc import compute_hashes, find_closest_matches
+    from fingerprinting.hash_calc import compute_hashes, find_closest_matches
     
     # Get already linked file IDs for this shop
     linked_df = get_files_for_shop(shop_id)
@@ -493,9 +492,7 @@ def render_reverse_image_search(shop_id: int) -> None:
             results = find_closest_matches(df_hashes, query_whash, query_ahash, query_phash, top_n=10)
             results_sorted = results.sort_values(selected_hash_col).head(10)
             
-            # Filter out already linked files
-            results_sorted = results_sorted[~results_sorted['fileid'].isin(linked_ids)]
-            
+            # Always show all results (up to 10), including already linked files
             if len(results_sorted) > 0:
                 st.subheader(f"Top {len(results_sorted)} Closest Matches")
                 
@@ -523,6 +520,11 @@ def render_reverse_image_search(shop_id: int) -> None:
                                 st.caption(row.filename)
                                 st.caption(f"{hash_type} Distance: {getattr(row, selected_hash_col)}")
                                 
+                                # Check if file is already linked to this shop
+                                is_linked = row.fileid in linked_ids
+                                if is_linked:
+                                    st.caption("✓ Already linked to this shop")
+                                
                                 # Select expander
                                 with st.expander("Select"):
                                     selected_file_data = {
@@ -530,7 +532,8 @@ def render_reverse_image_search(shop_id: int) -> None:
                                         'filename': row.filename,
                                         'preview_url': preview_url,
                                         'distance': getattr(row, selected_hash_col),
-                                        'hash_type': hash_type
+                                        'hash_type': hash_type,
+                                        'is_linked': is_linked
                                     }
                                     render_file_select_expander(
                                         shop_id=shop_id,
@@ -538,8 +541,6 @@ def render_reverse_image_search(shop_id: int) -> None:
                                         idx=idx,
                                         col_idx=col_idx
                                     )
-            else:
-                st.info("All matching files are already linked to this shop.")
         else:
             st.info("No matches found.")
     else:

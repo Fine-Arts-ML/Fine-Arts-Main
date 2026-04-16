@@ -985,65 +985,6 @@ def get_files_for_shop_account(shop_id: int, account_id: int) -> pd.DataFrame:
     return df
 
 
-def get_files_for_shop_account_paginated(shop_id: int, account_id: int, page_size: int = 20, offset: int = 0) -> tuple:
-    """
-    Get all files linked to a specific account for a specific shop with pagination.
-    Files are linked to accounts via the bre_account_index table with columns 'file_id' and 'account_id'.
-    
-    Parameters:
-        shop_id (int): ID of the shop
-        account_id (int): ID of the account
-        page_size (int): Number of files per page
-        offset (int): Number of files to skip (for pagination)
-        
-    Returns:
-        tuple: (files_df, total_count) where files_df is a DataFrame with file info
-               and total_count is the total number of files for this shop-account combination
-    """
-    engine = create_db_connection()
-    metadata = MetaData()
-    
-    # Reflect the tables
-    bre_account_index = Table('bre_account_index', metadata, autoload_with=engine)
-    bre_advance_index = Table('bre_advance_index', metadata, autoload_with=engine)
-    
-    # Get total count first
-    count_query = select(func.count()).select_from(
-        select(bre_account_index.c.file_id).where(
-            bre_account_index.c.account_id == account_id
-        ).subquery()
-    )
-    
-    with engine.begin() as connection:
-        total_result = connection.execute(count_query).fetchone()
-        total_count = total_result[0] if total_result else 0
-    
-    # Build query with pagination
-    subquery = select(bre_account_index.c.file_id).where(
-        bre_account_index.c.account_id == account_id
-    ).limit(page_size).offset(offset).subquery()
-    
-    query = select(
-        subquery.c.file_id.label('file_id'),
-        bre_advance_index.c.name.label('filename'),
-        bre_advance_index.c.preview_url.label('preview_url')
-    ).join(
-        bre_advance_index,
-        bre_advance_index.c.fileid.cast(Integer) == subquery.c.file_id.cast(Integer)
-    )
-    
-    with engine.begin() as connection:
-        result = connection.execute(query)
-        rows = result.fetchall()
-    
-    if rows:
-        df = pd.DataFrame(rows, columns=['file_id', 'filename', 'preview_url'])
-    else:
-        df = pd.DataFrame(columns=['file_id', 'filename', 'preview_url'])
-    
-    return df, total_count
-
-
 def get_all_hashes_from_db() -> pd.DataFrame:
     """
     Get all perceptual hashes from the bre_hashes table along with file info.

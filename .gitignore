@@ -14,3 +14,4 @@ ipynb-test-bench/image taging/live_pic/
 /plans/*
 py-code/shop_managment/utils/constants.py
 .roo/
+py-code/shop_managment/docker-compose.yml
