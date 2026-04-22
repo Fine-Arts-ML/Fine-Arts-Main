@@ -5,7 +5,7 @@ Account table components for the Shop Management app.
 import streamlit as st
 import pandas as pd
 from db_handler import (
-    get_accounts_for_shop, get_all_accounts, link_account_to_shop,
+    get_accounts_for_shop, get_all_accounts, get_all_shops, link_account_to_shop,
     remove_account_from_shop, remove_entity, update_entity
 )
 from forms.account_form import render_add_account_form, render_edit_account_form, render_remove_account_form
