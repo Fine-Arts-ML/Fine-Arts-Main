@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.nuxt
+    environment:
+      - NODE_ENV=development
+      - DB_HOST=db
+      - DB_NAME=shop_management
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_PORT=5432
+      - NC_ACC=${NC_ACC}
+      - NC_PASS=${NC_PASS}
+      - RAG_SERVICE_URL=http://rag-search:8079
+    depends_on:
+      - db
+      - rag-search
+    stdin_open: true
+    tty: true
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_DB=shop_management
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  rag-search:
+    build:
+      context: .
+      dockerfile: src/py-code/rag_search/Dockerfile
+    ports:
+      - "8079:8079"
+    environment:
+      - DB_HOST=db
+      - DB_NAME=shop_management
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_PORT=5432
+      - DEFAULT_MODEL=qwen3-0.6b
+      - MODELS_DIR=/py-code/Models
+      - INDEX_DIR=/data/tfidf-index
+      - MAX_CACHED_MODELS=1
+      - HOST=0.0.0.0
+      - PORT=8079
+    volumes:
+      - rag-models:/py-code/Models
+      - rag-index:/data/tfidf-index
+    deploy:
+      resources:
+        reservations:
+          memory: 8G
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  rag-models:
+  rag-index:

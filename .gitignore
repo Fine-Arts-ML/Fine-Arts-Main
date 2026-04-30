@@ -17,3 +17,9 @@ py-code/shop_managment/utils/constants.py
 py-code/shop_managment/docker-compose.yml
 py-code/shop_managment/Dockerimage/shop-management.tar
 py-code/shop_managment/Dockerimage/shop-management-latest.tar
+Shops_content/
+.vscode/
+.playwright-mcp/
+playwright-output/
+typescript/shop_management/src/py-code/Models/*
+typescript/shop_management/src/py-code/tfidf-index/*
