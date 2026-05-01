@@ -27,6 +27,7 @@ export const useLinkFiles = () => {
   const uploadLoading = ref(false)
   const uploadError = ref<string | null>(null)
   const searchError = ref<string | null>(null)
+  const published = ref(false) // Published flag for link-to-shop
 
   // Fetch shops on mount
   async function fetchShops() {
@@ -104,11 +105,11 @@ export const useLinkFiles = () => {
   }
 
   // Link file to shop and account
-  async function linkFileToShopAccount(fileId: number, shopId: number, accountId: number) {
+  async function linkFileToShopAccount(fileId: number, shopId: number, accountId: number, publishedFlag = false) {
     try {
       await $fetch('/api/files/link-to-shop-account', {
         method: 'POST',
-        body: { fileId, shopId, accountId },
+        body: { fileId, shopId, accountId, published: publishedFlag },
       })
       return true
     } catch (e: any) {
@@ -135,6 +136,7 @@ export const useLinkFiles = () => {
   function closeLinkMenu() {
     showLinkMenu.value = false
     selectedFile.value = null
+    published.value = false // Reset published flag
   }
 
   // Handle shop selection in link menu
@@ -223,6 +225,7 @@ export const useLinkFiles = () => {
     uploadLoading,
     uploadError,
     searchError,
+    published,
 
     // Actions
     fetchShops,

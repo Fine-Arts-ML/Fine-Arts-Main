@@ -17,9 +17,10 @@
 13. [Styling](#styling)
 14. [Environment Variables](#environment-variables)
 15. [Python Integration](#python-integration)
-16. [Development](#development)
-17. [Deployment](#deployment)
-18. [File Index](#file-index)
+16. [RAG Search](#rag-search)
+17. [Development](#development)
+18. [Deployment](#deployment)
+19. [File Index](#file-index)
 
 ---
 
@@ -106,7 +107,7 @@ typescript/shop_management/
 │   ├── assets/
 │   │   └── css/
 │   │       ├── global.css     # Global styles with CSS variables for theming
-│   │       └── tree-view.css  # Tree view visualization styles
+│   │       └── tree-view.css  # Tree view visualization styles (NOTE: file may be missing)
 │   ├── composables/           # Vue composables (reactive logic)
 │   │   ├── useLinkedFiles.ts  # Linked files browsing logic (Shop -> Account -> Files)
 │   │   ├── useLinkFiles.ts    # File linking logic (search, reverse search, link)
@@ -169,8 +170,22 @@ typescript/shop_management/
 │   │   ├── file.ts            # File-related types
 │   │   ├── linkedFile.ts      # Linked file types
 │   │   └── linkFiles.ts       # File linking types
-│   └── py-code/
-│       └── hash_helper.py     # Python script for perceptual hash calculation
+│   ├── composables/           # Vue composables (reactive logic)
+│   │   ├── useLinkedFiles.ts  # Linked files browsing logic (Shop -> Account -> Files)
+│   │   ├── useLinkFiles.ts    # File linking logic (search, reverse search, link)
+│   │   ├── useRagSearch.ts    # RAG semantic search composable
+│   │   ├── useRAGSettings.ts  # RAG settings management composable
+│   │   ├── useShops.ts        # Shop management logic
+│   │   └── useTheme.ts        # Theme toggle logic
+│   ├── py-code/
+│   │   ├── hash_helper.py     # Python script for perceptual hash calculation
+│   │   └── rag_search/        # Python RAG Search service (FastAPI)
+│   │       ├── main.py        # FastAPI application with API endpoints
+│   │       ├── search.py      # Core search logic using TF-IDF weighted embeddings
+│   │       ├── database.py    # Database connection and query handler
+│   │       ├── model_loader.py # Embedding model loading and caching
+│   │       ├── config.py      # RAG configuration
+│   │       └── tfidf_index.py # TF-IDF vectorization and index persistence
 ├── .env.example               # Environment variables template
 ├── docker-compose.yml         # Docker Compose for development
 ├── Dockerfile                 # Production Docker image
@@ -2004,6 +2019,43 @@ Python script for calculating perceptual hashes of images. Called via Node.js `c
 
 **Virtual Environment:** Located at `.venv/` in the project root. Python path: `.venv/bin/python`
 
+### RAG Search Service
+
+The application includes a **RAG (Retrieval-Augmented Generation) Search** service built with FastAPI that provides semantic search capabilities using embedding models and TF-IDF weighted document retrieval.
+
+**Key Components:**
+- **Embedding Models**: Sentence Transformers (e.g., `qwen3-0.6b`) for encoding text queries and documents
+- **TF-IDF Index**: Vectorizer built from file tags/metadata for context-aware retrieval
+- **Search Algorithm**: Query encoding → document embeddings → cosine similarity → top-k selection
+- **Model Caching**: LRU caching strategy with automatic eviction to manage memory
+- **Persistence**: Pre-computed document embeddings and TF-IDF index saved to disk
+
+**API Endpoints:**
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/v1/rag/search` | POST | Perform semantic search |
+| `/api/v1/rag/models` | GET | List available models |
+| `/api/v1/rag/models/current` | GET | Get currently loaded model |
+| `/api/v1/rag/models/switch` | POST | Switch to a different model |
+| `/api/v1/rag/models/download` | POST | Download a model from HuggingFace |
+| `/api/v1/rag/cache/config` | GET/POST | Get/update cache configuration |
+| `/api/v1/rag/cache/evict` | POST | Evict unused models from cache |
+| `/api/v1/rag/index/rebuild` | POST | Rebuild TF-IDF index from scratch |
+| `/api/v1/rag/health` | GET | Health check |
+
+**Nuxt API Proxy Routes:**
+- `POST /api/files/rag-search` - Proxies to Python RAG search service
+- `GET /api/settings/rag-models` - Lists available RAG models
+- `POST /api/settings/rag-model/index` - Switch RAG model
+- `GET /api/settings/rag-model/current` - Get current model
+- `POST /api/settings/rag-model/download` - Download model
+- `POST /api/settings/rag-cache/evict` - Evict cache
+- `GET /api/settings/rag-cache-config` - Get cache config
+- `POST /api/settings/rag-cache-config` - Update cache config
+- `POST /api/settings/rag-index/rebuild` - Rebuild index
+
+For detailed RAG documentation, see [`DOCUMENTATION_RAG.md`](DOCUMENTATION_RAG.md).
+
 ---
 
 ## Development
@@ -2155,4 +2207,22 @@ Set these environment variables when running the production container:
 | [`src/server/api/files/preview-proxy/[fileId].get.ts`](src/server/api/files/preview-proxy/[fileId].get.ts) | Preview proxy |
 | [`src/server/utils/preview.ts`](src/server/utils/preview.ts) | Preview URL transformation |
 | [`src/py-code/hash_helper.py`](src/py-code/hash_helper.py) | Python hash calculation |
+| [`src/py-code/rag_search/main.py`](src/py-code/rag_search/main.py) | RAG Search FastAPI app |
+| [`src/py-code/rag_search/search.py`](src/py-code/rag_search/search.py) | RAG search logic |
+| [`src/py-code/rag_search/database.py`](src/py-code/rag_search/database.py) | RAG database queries |
+| [`src/py-code/rag_search/model_loader.py`](src/py-code/rag_search/model_loader.py) | RAG model management |
+| [`src/py-code/rag_search/config.py`](src/py-code/rag_search/config.py) | RAG configuration |
+| [`src/py-code/rag_search/tfidf_index.py`](src/py-code/rag_search/tfidf_index.py) | TF-IDF index management |
+| [`src/composables/useRagSearch.ts`](src/composables/useRagSearch.ts) | RAG search composable |
+| [`src/composables/useRAGSettings.ts`](src/composables/useRAGSettings.ts) | RAG settings composable |
+| [`src/server/api/files/rag-search.post.ts`](src/server/api/files/rag-search.post.ts) | RAG search API proxy |
+| [`src/server/api/settings/rag-models.get.ts`](src/server/api/settings/rag-models.get.ts) | List RAG models |
+| [`src/server/api/settings/rag-model/index.post.ts`](src/server/api/settings/rag-model/index.post.ts) | Switch RAG model |
+| [`src/server/api/settings/rag-model/current.get.ts`](src/server/api/settings/rag-model/current.get.ts) | Get current model |
+| [`src/server/api/settings/rag-model/download.post.ts`](src/server/api/settings/rag-model/download.post.ts) | Download model |
+| [`src/server/api/settings/rag-cache/evict.post.ts`](src/server/api/settings/rag-cache/evict.post.ts) | Evict cache |
+| [`src/server/api/settings/rag-cache-config/index.get.ts`](src/server/api/settings/rag-cache-config/index.get.ts) | Get cache config |
+| [`src/server/api/settings/rag-cache-config/index.post.ts`](src/server/api/settings/rag-cache-config/index.post.ts) | Update cache config |
+| [`src/server/api/settings/rag-index/rebuild.post.ts`](src/server/api/settings/rag-index/rebuild.post.ts) | Rebuild index |
+| [`DOCUMENTATION_RAG.md`](DOCUMENTATION_RAG.md) | RAG Search documentation |
 | [`src/assets/css/global.css`](src/assets/css/global.css) | Global styles |

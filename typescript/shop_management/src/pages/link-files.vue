@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { Search, Image as ImageIcon, Loader2, X, Upload, ChevronRight, Eye } from 'lucide-vue-next'
+import { Search, Image as ImageIcon, Loader2, X, Upload, ChevronRight, Eye, CheckCircle2, Circle, Maximize2 } from 'lucide-vue-next'
 import { useLinkFiles } from '~/composables/useLinkFiles'
 import { useImagePreview } from '~/composables/useImagePreview'
 import ImagePreviewModal from '~/components/ImagePreviewModal.vue'
@@ -26,6 +26,7 @@ const {
   uploadLoading,
   uploadError,
   searchError,
+  published,
   searchByFilename,
   reverseSearch,
   linkFileToShopAccount,
@@ -57,6 +58,13 @@ function openPreview(fileId: number, filename: string) {
 const linkSuccess = ref(false)
 const linkError = ref<string | null>(null)
 
+// Get selected shop name from shops array
+const selectedShopName = computed(() => {
+  if (!selectedShopId.value) return '[shop]'
+  const shop = shops.value.find(s => s.shop_id === selectedShopId.value)
+  return shop?.shop_name || '[shop]'
+})
+
 // Handle link submission
 async function handleLinkSubmit() {
   if (!selectedFile.value || !selectedShopId.value || !selectedAccountId.value) return
@@ -65,7 +73,7 @@ async function handleLinkSubmit() {
   linkError.value = null
 
   try {
-    await linkFileToShopAccount(selectedFile.value.fileId, selectedShopId.value, selectedAccountId.value)
+    await linkFileToShopAccount(selectedFile.value.fileId, selectedShopId.value, selectedAccountId.value, published.value)
     linkSuccess.value = true
     setTimeout(() => {
       closeLinkMenu()
@@ -128,106 +136,121 @@ function formatDistance(distance: number | undefined): string {
     </div>
 
     <!-- Mode Switcher -->
-    <div class="mb-6">
-      <div class="inline-flex rounded-lg border border-gray-200 dark:border-gray-700 p-1 bg-gray-50 dark:bg-gray-800">
-        <button
-          :class="[
-            'px-4 py-2 rounded-md text-sm font-medium transition-colors',
-            searchMode === 'filename'
-              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
-              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
-          ]"
-          @click="switchMode('filename')"
-        >
-          Search by Name
-        </button>
-        <button
-          :class="[
-            'px-4 py-2 rounded-md text-sm font-medium transition-colors',
-            searchMode === 'reverse'
-              ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow-sm'
-              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
-          ]"
-          @click="switchMode('reverse')"
-        >
-          Reverse Search
-        </button>
-      </div>
+    <div class="flex items-center gap-4 mb-6">
+      <button
+        :class="[
+          'px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2',
+          searchMode === 'filename'
+            ? 'bg-blue-600 text-white'
+            : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+        ]"
+        @click="switchMode('filename')"
+      >
+        <Search class="w-4 h-4" />
+        Filename Search
+      </button>
+      <button
+        :class="[
+          'px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2',
+          searchMode === 'reverse'
+            ? 'bg-blue-600 text-white'
+            : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+        ]"
+        @click="switchMode('reverse')"
+      >
+        <Upload class="w-4 h-4" />
+        Reverse Image Search
+      </button>
     </div>
 
-    <!-- Mode 1: Search by Name -->
-    <div v-if="searchMode === 'filename'">
+    <!-- Mode 1: Filename Search -->
+    <div v-if="searchMode === 'filename'" class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
       <!-- Search Input -->
-      <div class="mb-6">
-        <div class="flex gap-2 max-w-xl">
-          <div class="relative flex-1">
-            <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              v-model="searchQuery"
-              type="text"
-              placeholder="Search by filename or display name..."
-              class="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              @keyup.enter="handleSearchSubmit"
-            />
-          </div>
-          <button
-            @click="handleSearchSubmit"
-            :disabled="searchLoading || !searchQuery.trim()"
-            class="px-6 py-2.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            <Loader2 v-if="searchLoading" class="w-5 h-5 animate-spin" />
-            <span v-else>Search</span>
-          </button>
+      <div class="flex gap-3 mb-6">
+        <div class="flex-1 relative">
+          <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            v-model="searchQuery"
+            @keyup.enter="handleSearchSubmit"
+            type="text"
+            placeholder="Search by filename or display name..."
+            class="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
+          />
         </div>
+        <button
+          @click="handleSearchSubmit"
+          :disabled="searchLoading || !searchQuery.trim()"
+          class="px-6 py-2.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+        >
+          <Loader2 v-if="searchLoading" class="w-4 h-4 animate-spin" />
+          Search
+        </button>
       </div>
 
       <!-- Search Error -->
-      <div v-if="searchError" class="mb-4 p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-        <p class="text-red-600 dark:text-red-400">{{ searchError }}</p>
+      <div v-if="searchError" class="p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 mb-4">
+        <p class="text-red-600 dark:text-red-400 text-sm">{{ searchError }}</p>
+      </div>
+
+      <!-- Loading State -->
+      <div v-if="searchLoading" class="p-12 text-center">
+        <Loader2 class="w-8 h-8 animate-spin mx-auto text-gray-400" />
+        <p class="text-gray-500 dark:text-gray-400 mt-2">Searching...</p>
       </div>
 
       <!-- Results Grid -->
-      <div v-if="searchResults.length > 0" class="mt-6">
-        <!-- Warning for insufficient search -->
-        <div v-if="exceedsLimit" class="mb-4 p-3 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800">
-          <p class="text-yellow-700 dark:text-yellow-400 text-sm">
-            More than 10 results found. Your search term wasn't specific enough. Try refining your search query for better results.
+      <div v-else-if="searchResults.length > 0">
+        <div class="flex items-center justify-between mb-4">
+          <p class="text-sm text-gray-600 dark:text-gray-400">
+            Found {{ searchResults.length }} results
+            <span v-if="exceedsLimit" class="text-amber-600 dark:text-amber-400">(limited to 10)</span>
           </p>
+          <button
+            @click="clearResults"
+            class="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+          >
+            Clear
+          </button>
         </div>
-
-        <!-- File Grid -->
-        <div class="file-grid">
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           <div
             v-for="file in searchResults"
             :key="file.fileId"
-            class="file-grid-item group rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-400 transition-colors"
+            class="group relative rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-400 transition-colors cursor-pointer"
             @click="openLinkMenu(file)"
           >
+            <!-- Thumbnail -->
             <div class="aspect-square bg-gray-100 dark:bg-gray-800 relative">
               <img
                 :src="getPreviewUrl(file, 540)"
-                :alt="file.displayName || file.filename"
+                :alt="file.filename"
                 class="w-full h-full object-cover"
-                @error="(e) => { const target = e.target as HTMLImageElement; target.src = '' }"
+                @error="e => { (e.target as HTMLImageElement).style.display = 'none' }"
               />
-              <!-- Preview button (top-right corner) -->
+              <!-- Enlarge Icon (Top Right) -->
               <button
-                @click.stop="openPreview(file.fileId, file.filename)"
-                class="absolute top-2 right-2 p-1.5 bg-black/50 rounded-full hover:bg-black/70 transition-colors"
-                title="Preview image"
+                class="absolute top-2 right-2 z-10 p-1.5 rounded-md bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/70"
+                @click.stop.prevent="openPreview(file.fileId, file.filename)"
               >
-                <Eye class="w-4 h-4 text-white" />
+                <Maximize2 class="w-3.5 h-3.5" />
               </button>
-              <!-- Link button (center, on group hover) -->
-              <div class="absolute inset-0 pointer-events-none bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
-                <ChevronRight class="w-8 h-8 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+              <!-- Link Button Overlay -->
+              <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                <button
+                  class="px-4 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
+                  @click.stop="openLinkMenu(file)"
+                >
+                  <ChevronRight class="w-4 h-4" />
+                  Link
+                </button>
               </div>
             </div>
-            <div class="p-3 bg-white dark:bg-gray-800">
-              <p class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate" :title="file.filename">
+            <!-- File Info -->
+            <div class="p-3 bg-white dark:bg-gray-900">
+              <p class="text-xs font-medium text-gray-900 dark:text-gray-100 truncate" :title="file.filename">
                 {{ file.filename }}
               </p>
-              <p v-if="file.displayName" class="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
+              <p v-if="file.displayName" class="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
                 {{ file.displayName }}
               </p>
             </div>
@@ -235,173 +258,147 @@ function formatDistance(distance: number | undefined): string {
         </div>
       </div>
 
-      <!-- Loading State -->
-      <div v-if="searchLoading" class="flex items-center justify-center py-12">
-        <Loader2 class="w-8 h-8 animate-spin text-gray-400" />
-      </div>
-
       <!-- Empty State -->
-      <div v-if="!searchResults.length && !searchLoading && !searchError" class="text-center py-12">
-        <ImageIcon class="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-3" />
-        <p class="text-gray-500 dark:text-gray-400">Enter a search term to find files</p>
+      <div v-else-if="!searchLoading && searchQuery" class="p-12 text-center">
+        <ImageIcon class="w-12 h-12 mx-auto text-gray-300 dark:text-gray-600" />
+        <p class="text-gray-500 dark:text-gray-400 mt-2">No files found matching "{{ searchQuery }}"</p>
       </div>
     </div>
 
-    <!-- Mode 2: Reverse Search -->
-    <div v-if="searchMode === 'reverse'">
-      <!-- Upload Area (shown when no image uploaded) -->
-      <div v-if="!uploadedImage && !uploadLoading" class="mb-6">
-        <div
-          class="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-12 text-center cursor-pointer hover:border-blue-500 dark:hover:border-blue-400 transition-colors"
-          @drop="handleDrop"
-          @dragover="handleDragOver"
-          @click="fileInput?.click()"
+    <!-- Mode 2: Reverse Image Search -->
+    <div v-else class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-6">
+      <!-- Hash Method Selection -->
+      <div class="flex items-center gap-4 mb-6">
+        <label class="text-sm font-medium text-gray-700 dark:text-gray-300">Hash Method:</label>
+        <select
+          v-model="selectedHashMethod"
+          class="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
         >
-          <Upload class="w-12 h-12 text-gray-400 mx-auto mb-3" />
-          <p class="text-gray-600 dark:text-gray-400 mb-2">Drag and drop an image here, or click to select</p>
-          <p class="text-sm text-gray-400 dark:text-gray-500">Supports JPG, PNG, WEBP</p>
-          <input
-            ref="fileInput"
-            type="file"
-            accept="image/*"
-            class="hidden"
-            @change="handleFileInputChange"
-          />
-        </div>
+          <option value="whash">Whitened Hash</option>
+          <option value="ahash">Average Hash</option>
+          <option value="phash">Phase Hash</option>
+        </select>
       </div>
 
-      <!-- Hash Method Selector -->
-      <div v-if="uploadedImage" class="mb-6">
-        <div class="flex items-center gap-3">
-          <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Hash Method:</span>
-          <select
-            v-model="selectedHashMethod"
-            class="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="whash">Wavelet Hash (whash)</option>
-            <option value="ahash">Average Hash (ahash)</option>
-            <option value="phash">Perceptual Hash (phash)</option>
-            <option value="average">Average (all methods)</option>
-          </select>
-          <button
-            @click="uploadedImage && reverseSearch(uploadedImage)"
-            :disabled="uploadLoading"
-            class="ml-auto px-6 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            <Loader2 v-if="uploadLoading" class="w-5 h-5 animate-spin" />
-            <span v-else>Search</span>
-          </button>
+      <!-- Upload Area -->
+      <div
+        class="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-12 text-center cursor-pointer hover:border-blue-500 dark:hover:border-blue-400 transition-colors"
+        @click="fileInput?.click()"
+        @dragover.prevent
+        @drop="handleDrop"
+      >
+        <Upload class="w-12 h-12 mx-auto text-gray-400 mb-4" />
+        <p class="text-gray-600 dark:text-gray-400 mb-2">
+          Drag and drop an image here, or click to select
+        </p>
+        <p class="text-sm text-gray-500 dark:text-gray-500">
+          Supports JPG, PNG, WEBP
+        </p>
+        <input
+          ref="fileInput"
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          class="hidden"
+          @change="handleFileInputChange"
+        />
+      </div>
+
+      <!-- Uploaded Image Preview -->
+      <div v-if="uploadedImagePreview" class="mt-6">
+        <div class="flex items-center gap-4 p-4 rounded-lg bg-gray-50 dark:bg-gray-800">
+          <img
+            :src="uploadedImagePreview"
+            :alt="uploadedImage?.name || 'Uploaded image'"
+            class="w-20 h-20 rounded object-cover"
+          />
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+              {{ uploadedImage?.name }}
+            </p>
+            <p class="text-xs text-gray-500 dark:text-gray-400">
+              {{ uploadedImage ? (uploadedImage.size / 1024 / 1024).toFixed(2) : '0' }} MB
+            </p>
+          </div>
           <button
             v-if="!uploadLoading"
+            @click="uploadedImage = null"
+            class="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+          >
+            <X class="w-4 h-4 text-gray-500" />
+          </button>
+        </div>
+
+        <!-- Upload Button -->
+        <button
+          v-if="!uploadLoading && !searchResults.length"
+          @click="uploadedImage && reverseSearch(uploadedImage)"
+          class="mt-4 w-full px-4 py-2.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+        >
+          <Eye class="w-4 h-4" />
+          Search for Similar Images
+        </button>
+      </div>
+
+      <!-- Upload Error -->
+      <div v-if="uploadError" class="p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 mt-4">
+        <p class="text-red-600 dark:text-red-400 text-sm">{{ uploadError }}</p>
+      </div>
+
+      <!-- Loading State -->
+      <div v-if="uploadLoading || searchLoading" class="p-12 text-center mt-4">
+        <Loader2 class="w-8 h-8 animate-spin mx-auto text-gray-400" />
+        <p class="text-gray-500 dark:text-gray-400 mt-2">Processing image...</p>
+      </div>
+
+      <!-- Results Grid -->
+      <div v-else-if="searchResults.length > 0" class="mt-6">
+        <div class="flex items-center justify-between mb-4">
+          <p class="text-sm text-gray-600 dark:text-gray-400">
+            Found {{ searchResults.length }} similar images
+            <span v-if="exceedsLimit" class="text-amber-600 dark:text-amber-400">(limited to 10)</span>
+          </p>
+          <button
             @click="clearResults"
-            class="px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            class="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
           >
             Clear
           </button>
         </div>
-      </div>
-
-      <!-- Upload/Search Error -->
-      <div v-if="uploadError || searchError" class="mb-4 p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800">
-        <p class="text-red-600 dark:text-red-400">{{ uploadError || searchError }}</p>
-      </div>
-
-      <!-- Loading State -->
-      <div v-if="uploadLoading" class="flex items-center justify-center py-12">
-        <Loader2 class="w-8 h-8 animate-spin text-gray-400 mr-3" />
-        <p class="text-gray-600 dark:text-gray-400">Calculating hashes and searching...</p>
-      </div>
-
-      <!-- Results -->
-      <div v-if="searchResults.length > 0 && !uploadLoading" class="reverse-search-results">
-        <!-- Top Row: Uploaded Image + Best Match -->
-        <div class="top-row">
-          <!-- Uploaded Image -->
-          <div class="top-row-item">
-            <div class="rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 bg-gray-100 dark:bg-gray-800">
-              <div class="aspect-square">
-                <img
-                  v-if="uploadedImagePreview"
-                  :src="uploadedImagePreview"
-                  alt="Uploaded image"
-                  class="w-full h-full object-contain"
-                />
-              </div>
-              <div class="p-3 bg-white dark:bg-gray-800">
-                <p class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                  {{ uploadedImage?.name || 'Uploaded Image' }}
-                </p>
-                <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Your image</p>
-              </div>
-            </div>
-          </div>
-
-          <!-- Best Match -->
-          <div class="top-row-item">
-            <div
-              v-if="searchResults[0]"
-              class="rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-400 transition-colors bg-gray-100 dark:bg-gray-800"
-            >
-              <div class="aspect-square relative">
-                <img
-                  :src="getPreviewUrl(searchResults[0], 540)"
-                  :alt="searchResults[0].displayName || searchResults[0].filename"
-                  class="w-full h-full object-cover"
-                  @error="(e) => { const target = e.target as HTMLImageElement; target.src = '' }"
-                />
-                <!-- Preview button (top-right corner) -->
-                <button
-                  @click.stop="openPreview(searchResults[0].fileId, searchResults[0].filename)"
-                  class="absolute top-2 right-2 p-1.5 bg-black/50 rounded-full hover:bg-black/70 transition-colors"
-                  title="Preview image"
-                >
-                  <Eye class="w-4 h-4 text-white" />
-                </button>
-              </div>
-              <div class="p-3 bg-white dark:bg-gray-800">
-                <p class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                  {{ searchResults[0].filename }}
-                </p>
-                <p v-if="searchResults[0].displayName" class="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
-                  {{ searchResults[0].displayName }}
-                </p>
-                <p class="text-xs text-blue-600 dark:text-blue-400 mt-1">
-                  Distance: {{ formatDistance(searchResults[0].combinedDistance) }}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 3x3 Grid of Other Matches -->
-        <div class="bottom-grid">
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
           <div
-            v-for="file in searchResults.slice(1, 10)"
+            v-for="file in searchResults"
             :key="file.fileId"
-            class="bottom-grid-item rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-400 transition-colors"
+            class="group relative rounded-lg overflow-hidden border border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-400 transition-colors cursor-pointer"
             @click="openLinkMenu(file)"
           >
+            <!-- Thumbnail -->
             <div class="aspect-square bg-gray-100 dark:bg-gray-800 relative">
               <img
-                :src="getPreviewUrl(file, 180)"
-                :alt="file.displayName || file.filename"
+                :src="getPreviewUrl(file, 540)"
+                :alt="file.filename"
                 class="w-full h-full object-cover"
-                @error="(e) => { const target = e.target as HTMLImageElement; target.src = '' }"
+                @error="e => { (e.target as HTMLImageElement).style.display = 'none' }"
               />
-              <!-- Preview button (top-right corner) -->
-              <button
-                @click.stop="openPreview(file.fileId, file.filename)"
-                class="absolute top-2 right-2 p-1.5 bg-black/50 rounded-full hover:bg-black/70 transition-colors"
-                title="Preview image"
-              >
-                <Eye class="w-4 h-4 text-white" />
-              </button>
+              <!-- Link Button Overlay -->
+              <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                <button
+                  class="px-4 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors flex items-center gap-2"
+                  @click.stop="openLinkMenu(file)"
+                >
+                  <ChevronRight class="w-4 h-4" />
+                  Link
+                </button>
+              </div>
             </div>
-            <div class="p-2 bg-white dark:bg-gray-800">
+            <!-- File Info -->
+            <div class="p-3 bg-white dark:bg-gray-900">
               <p class="text-xs font-medium text-gray-900 dark:text-gray-100 truncate" :title="file.filename">
                 {{ file.filename }}
               </p>
-              <p class="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
+              <p v-if="file.displayName" class="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                {{ file.displayName }}
+              </p>
+              <p v-if="file.combinedDistance !== undefined" class="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">
                 dist: {{ formatDistance(file.combinedDistance) }}
               </p>
             </div>
@@ -492,6 +489,35 @@ function formatDistance(distance: number | undefined): string {
                   </option>
                 </select>
               </div>
+
+              <!-- Published Toggle -->
+              <div class="mb-4">
+                <label class="flex items-center gap-3 cursor-pointer group">
+                  <div class="relative">
+                    <input
+                      v-model="published"
+                      type="checkbox"
+                      class="sr-only"
+                    />
+                    <div :class="[
+                      'w-10 h-6 rounded-full transition-colors',
+                      published ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'
+                    ]"></div>
+                    <div :class="[
+                      'absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform shadow',
+                      published ? 'translate-x-4' : 'translate-x-0'
+                    ]"></div>
+                  </div>
+                  <div>
+                    <span class="text-sm font-medium text-gray-700 dark:text-gray-300 group-hover:text-gray-900 dark:group-hover:text-gray-100">
+                      Published in {{ selectedShopName }}?
+                    </span>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">
+                      Make this file available for purchase
+                    </p>
+                  </div>
+                </label>
+              </div>
             </div>
 
             <!-- Footer -->
@@ -530,61 +556,51 @@ function formatDistance(distance: number | undefined): string {
   margin: 0 auto;
 }
 
-.file-grid-item {
-  max-width: 540px;
-  margin: 0 auto;
-  width: 100%;
+@media (min-width: 768px) {
+  .file-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
 }
 
-/* Mode 2: Reverse Search Layout */
-.reverse-search-results {
-  max-width: 1080px;
-  margin: 0 auto;
+@media (min-width: 1024px) {
+  .file-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
 }
 
-.top-row {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.top-row-item {
-  max-width: 540px;
-  margin: 0 auto;
-  width: 100%;
-}
-
-.bottom-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-}
-
-.bottom-grid-item {
-  max-width: 180px;
-  margin: 0 auto;
-  width: 100%;
-}
-
-/* Menu Transitions */
+/* Menu transition */
 .menu-enter-active,
 .menu-leave-active {
-  transition: opacity 0.2s ease;
+  transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 .menu-enter-from,
 .menu-leave-to {
   opacity: 0;
-}
-
-.menu-enter-active .relative,
-.menu-leave-active .relative {
-  transition: transform 0.2s ease;
-}
-
-.menu-enter-from .relative,
-.menu-leave-to .relative {
   transform: translateX(100%);
+}
+
+.menu-enter-to,
+.menu-leave-from {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #4b5563;
 }
 </style>

@@ -8,6 +8,7 @@ export const useLinkedFiles = () => {
   const selectedShop = ref<Shop | null>(null)
   const selectedAccount = ref<{ accountId: number; accountName: string } | null>(null)
   const searchQuery = ref('')
+  const publishedFilter = ref<'all' | 'true' | 'false'>('all')
   const linkedFiles = ref<LinkedFileResult[]>([])
   const shopAccounts = ref<ShopAccountWithFileCount[]>([])
   const loading = ref(false)
@@ -96,6 +97,10 @@ export const useLinkedFiles = () => {
       params.accountId = String(selectedAccount.value.accountId)
     }
 
+    if (publishedFilter.value !== 'all') {
+      params.published = publishedFilter.value
+    }
+
     if (searchQuery.value.trim()) {
       params.query = searchQuery.value.trim()
     }
@@ -115,6 +120,7 @@ export const useLinkedFiles = () => {
         filename: file.filename,
         previewUrl: file.previewUrl,
         displayName: file.displayName,
+        published: file.published ?? false,
         accountId: file.accountIds?.[0] ?? 0,
         accountName: file.accountNames?.[0] ?? '',
         accountNames: file.accountNames ?? [],
@@ -152,6 +158,7 @@ export const useLinkedFiles = () => {
     // New shop selected - reset state
     selectedShop.value = shop
     selectedAccount.value = null
+    publishedFilter.value = 'all'
     searchQuery.value = ''
     offset.value = 0
     hasMore.value = true
@@ -180,6 +187,7 @@ export const useLinkedFiles = () => {
   function goBackToShopList() {
     selectedShop.value = null
     selectedAccount.value = null
+    publishedFilter.value = 'all'
     searchQuery.value = ''
     linkedFiles.value = []
     shopAccounts.value = []
@@ -193,6 +201,7 @@ export const useLinkedFiles = () => {
     if (!selectedShop.value) return
 
     selectedAccount.value = null
+    publishedFilter.value = 'all'
     searchQuery.value = ''
     offset.value = 0
     hasMore.value = true
@@ -215,6 +224,14 @@ export const useLinkedFiles = () => {
         fetchFiles(false)
       }
     }, 300)
+  }
+
+  // Set published filter
+  async function setPublishedFilter(filter: 'all' | 'true' | 'false') {
+    publishedFilter.value = filter
+    offset.value = 0
+    hasMore.value = true
+    await fetchFiles()
   }
 
   // Load more files
@@ -256,6 +273,43 @@ export const useLinkedFiles = () => {
     }
   }
 
+  // Toggle published status for a file
+  async function togglePublished(fileId: number, newPublished: boolean) {
+    if (!selectedShop.value) return false
+
+    try {
+      await $fetch('/api/files/published', {
+        method: 'PUT',
+        body: {
+          fileId,
+          shopId: selectedShop.value.shop_id,
+          published: newPublished,
+        },
+      })
+
+      // Update local state - replace the object to trigger Vue reactivity
+      const fileIndex = linkedFiles.value.findIndex(f => Number(f.fileId) === fileId)
+      if (fileIndex !== -1) {
+        const file = linkedFiles.value[fileIndex]
+        linkedFiles.value[fileIndex] = {
+          fileId: file.fileId,
+          filename: file.filename,
+          previewUrl: file.previewUrl,
+          displayName: file.displayName,
+          published: newPublished,
+          accountId: file.accountId,
+          accountName: file.accountName,
+          accountNames: file.accountNames,
+        }
+      }
+
+      return true
+    } catch (e: any) {
+      console.error('[useLinkedFiles] Failed to toggle published:', e)
+      return false
+    }
+  }
+
   // Clear all selections
   function clearSelection() {
     goBackToShopList()
@@ -265,6 +319,7 @@ export const useLinkedFiles = () => {
     // State
     selectedShop,
     selectedAccount,
+    publishedFilter,
     searchQuery,
     linkedFiles,
     shopAccounts,
@@ -280,6 +335,8 @@ export const useLinkedFiles = () => {
     goBackToShopList,
     goBackToShopView,
     performSearch,
+    setPublishedFilter,
+    togglePublished,
     loadMore,
     unlinkFile,
     clearSelection,

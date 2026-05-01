@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick } from 'vue'
-import { Search, Image as ImageIcon, Loader2, ChevronRight, Trash2, X } from 'lucide-vue-next'
+import { Search, Image as ImageIcon, Loader2, ChevronRight, Trash2, X, CheckCircle2, Circle, Eye, EyeOff } from 'lucide-vue-next'
 import { useLinkedFiles } from '~/composables/useLinkedFiles'
 import { useImagePreview } from '~/composables/useImagePreview'
 import ImagePreviewModal from '~/components/ImagePreviewModal.vue'
@@ -25,6 +25,7 @@ async function fetchShops() {
 const {
   selectedShop: lfSelectedShop,
   selectedAccount: lfSelectedAccount,
+  publishedFilter: lfPublishedFilter,
   searchQuery: lfSearchQuery,
   linkedFiles: lfLinkedFiles,
   shopAccounts: lfShopAccounts,
@@ -35,6 +36,8 @@ const {
   goBackToShopList: lfGoBackToShopList,
   goBackToShopView: lfGoBackToShopView,
   performSearch: lfPerformSearch,
+  setPublishedFilter: lfSetPublishedFilter,
+  togglePublished: lfTogglePublished,
   loadMore: lfLoadMore,
   unlinkFile: lfUnlinkFile,
   setupResizeObserver: lfSetupResizeObserver,
@@ -251,24 +254,67 @@ function getThumbnailUrl(file: { fileId: number | bigint; previewUrl: string | n
           </div>
         </div>
 
-        <!-- Search Input (always between accounts and file list) -->
+        <!-- Search Input and Published Filter (between accounts and file list) -->
         <div class="p-4">
-          <div class="relative">
-            <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              v-model="lfSearchQuery"
-              @input="lfPerformSearch(($event.target as HTMLInputElement).value)"
-              type="text"
-              placeholder="Search filenames or display names..."
-              class="w-full pl-10 pr-10 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-            <button
-              v-if="lfSearchQuery"
-              @click="lfPerformSearch('')"
-              class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-            >
-              ×
-            </button>
+          <div class="flex items-center gap-3">
+            <!-- Search Input -->
+            <div class="flex-1 relative">
+              <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                v-model="lfSearchQuery"
+                @input="lfPerformSearch(($event.target as HTMLInputElement).value)"
+                type="text"
+                placeholder="Search filenames or display names..."
+                class="w-full pl-10 pr-10 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 rounded-md text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <button
+                v-if="lfSearchQuery"
+                @click="lfPerformSearch('')"
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              >
+                ×
+              </button>
+            </div>
+
+            <!-- Published Filter -->
+            <div class="flex items-center gap-1 bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+              <button
+                @click="lfSetPublishedFilter('all')"
+                :class="[
+                  'px-3 py-1.5 rounded text-xs font-medium transition-colors flex items-center gap-1.5',
+                  lfPublishedFilter === 'all'
+                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+                ]"
+              >
+                <CheckCircle2 class="w-3.5 h-3.5" />
+                All
+              </button>
+              <button
+                @click="lfSetPublishedFilter('true')"
+                :class="[
+                  'px-3 py-1.5 rounded text-xs font-medium transition-colors flex items-center gap-1.5',
+                  lfPublishedFilter === 'true'
+                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+                ]"
+              >
+                <CheckCircle2 class="w-3.5 h-3.5" />
+                Published
+              </button>
+              <button
+                @click="lfSetPublishedFilter('false')"
+                :class="[
+                  'px-3 py-1.5 rounded text-xs font-medium transition-colors flex items-center gap-1.5',
+                  lfPublishedFilter === 'false'
+                    ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 shadow'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
+                ]"
+              >
+                <Circle class="w-3.5 h-3.5" />
+                Unpublished
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -324,17 +370,52 @@ function getThumbnailUrl(file: { fileId: number | bigint; previewUrl: string | n
 
             <!-- File Info -->
             <div class="flex-1 min-w-0">
-              <!-- Account Names (only shown in shop view, not account view) -->
-              <div v-if="!lfSelectedAccount" class="text-xs text-gray-500 dark:text-gray-400 mb-1">
-                <template v-if="file.accountNames && file.accountNames.length > 1">
-                  <span v-for="(acct, idx) in file.accountNames" :key="idx">
-                    <template v-if="idx > 0">, </template>
-                    {{ acct }}
-                  </span>
-                </template>
-                <template v-else>
-                  {{ file.accountName }}
-                </template>
+              <!-- Published Indicator and Account Names -->
+              <div class="flex items-center gap-2 mb-1">
+                <!-- Published Badge -->
+                <button
+                  @click="lfSetPublishedFilter(file.published ? 'false' : 'true')"
+                  class="flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium transition-colors"
+                  :class="[
+                    file.published
+                      ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50'
+                      : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                  ]"
+                  :title="file.published ? 'Click to filter unpublished' : 'Click to filter published'"
+                >
+                  <CheckCircle2 v-if="file.published" class="w-3.5 h-3.5" />
+                  <Circle v-else class="w-3.5 h-3.5" />
+                  {{ file.published ? 'Published' : 'Unpublished' }}
+                </button>
+
+                <!-- Toggle Published Button -->
+                <button
+                  @click="lfTogglePublished(file.fileId, !file.published)"
+                  class="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium transition-colors"
+                  :class="[
+                    file.published
+                      ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-900/50'
+                      : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50'
+                  ]"
+                  :title="file.published ? 'Click to unpublish' : 'Click to publish'"
+                >
+                  <ToggleIcon v-if="file.published" class="w-3.5 h-3.5" />
+                  <ToggleIcon v-else class="w-3.5 h-3.5" />
+                  {{ file.published ? 'Unpublish' : 'Publish' }}
+                </button>
+
+                <!-- Account Names (only shown in shop view, not account view) -->
+                <div v-if="!lfSelectedAccount" class="text-xs text-gray-500 dark:text-gray-400">
+                  <template v-if="file.accountNames && file.accountNames.length > 1">
+                    <span v-for="(acct, idx) in file.accountNames" :key="idx">
+                      <template v-if="idx > 0">, </template>
+                      {{ acct }}
+                    </span>
+                  </template>
+                  <template v-else>
+                    {{ file.accountName }}
+                  </template>
+                </div>
               </div>
 
               <!-- Display Name or Filename -->
@@ -381,6 +462,7 @@ function getThumbnailUrl(file: { fileId: number | bigint; previewUrl: string | n
           Showing {{ lfLinkedFiles.length }} files
           <template v-if="lfSelectedAccount"> for account {{ lfSelectedAccount.accountName }}</template>
           <template v-if="lfSearchQuery"> matching "{{ lfSearchQuery }}"</template>
+          <template v-if="lfPublishedFilter !== 'all'"> · Filter: {{ lfPublishedFilter === 'true' ? 'Published only' : lfPublishedFilter === 'false' ? 'Unpublished only' : 'All' }}</template>
         </div>
       </div>
     </div>

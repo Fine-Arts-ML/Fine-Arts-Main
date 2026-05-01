@@ -179,7 +179,7 @@ async function handleDeleteShop(shopId: number) {
   }
 }
 
-// Delete account handler
+// Delete account handler (Shop Management tab - removing account from shop)
 async function handleDeleteAccount(shopId: number, accountId: number) {
   const key = `${shopId}-${accountId}`
   deletingAccount.value[key] = true
@@ -191,6 +191,26 @@ async function handleDeleteAccount(shopId: number, accountId: number) {
     await fetchShops()
     // Refresh accounts list
     await fetchAccounts()
+  } catch (err: any) {
+    alert(err.message || 'Failed to delete account')
+  } finally {
+    deletingAccount.value[key] = false
+  }
+}
+
+// Delete account handler (Account Management tab - full deletion with confirmation)
+async function handleDeleteAccountFromManagement(accountId: number) {
+  if (!confirm('Are you sure you want to delete this account? This will also remove all associated file links and shop connections.')) {
+    return
+  }
+  const key = `management-${accountId}`
+  deletingAccount.value[key] = true
+  try {
+    await $fetch(`/api/accounts/${accountId}`, { method: 'DELETE' })
+    // Refresh accounts list
+    await fetchAccounts()
+    // Refresh shops list to update account counts
+    await fetchShops()
   } catch (err: any) {
     alert(err.message || 'Failed to delete account')
   } finally {
@@ -541,7 +561,9 @@ onMounted(async () => {
                       <Pencil class="w-4 h-4" />
                     </button>
                     <button
-                      class="p-1.5 rounded-md hover:bg-red-100 dark:hover:bg-red-900/20 text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                      @click="handleDeleteAccountFromManagement(account.account_id)"
+                      :disabled="deletingAccount[`management-${account.account_id}`]"
+                      class="p-1.5 rounded-md hover:bg-red-100 dark:hover:bg-red-900/20 text-gray-600 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       title="Delete"
                     >
                       <Trash2 class="w-4 h-4" />

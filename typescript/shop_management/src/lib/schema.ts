@@ -1,7 +1,7 @@
 // Drizzle ORM Schema Definitions
 // This file defines the database schema for the Shop Management application
 
-import { pgTable, serial, text, integer, bigint } from 'drizzle-orm/pg-core'
+import { pgTable, serial, text, integer, bigint, boolean } from 'drizzle-orm/pg-core'
 
 // Shop table
 export const shops = pgTable('bre_shops', {
@@ -61,6 +61,7 @@ export const fileJunction = pgTable('bre_file_junction', {
   shopId: bigint('shop_id', { mode: 'number' }).references(() => shops.shopId),
   fileId: text('file_id').notNull(),
   accountId: bigint('account_id', { mode: 'number' }).references(() => accounts.accountId),
+  published: boolean('published').default(false),
 })
 
 // RAG Model Settings table (stores user preferences for RAG search)

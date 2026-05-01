@@ -8,6 +8,7 @@ export default defineEventHandler(async (event) => {
     const limit = parseInt(getQuery(event).limit as string || '15', 10)
     const offset = parseInt(getQuery(event).offset as string || '0', 10)
     const previewSize = parseInt(getQuery(event).previewSize as string || '64', 10)
+    const publishedFilter = getQuery(event).published as string | undefined
 
     if (!id) {
       throw createError({
@@ -24,14 +25,14 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    console.log(`[linked-files-search] shopId=${shopId}, accountId=${accountId}, query=${query}, limit=${limit}, offset=${offset}`)
+    console.log(`[linked-files-search] shopId=${shopId}, accountId=${accountId}, query=${query}, limit=${limit}, offset=${offset}, publishedFilter=${publishedFilter}`)
 
     const searchQuery = query ? `%${query.trim()}%` : null
     const hasSearchQuery = !!query && query.trim().length > 0
 
     // Use raw SQL with parameterized query using bre_file_junction as the source of truth
-    // Build params array: [shopId, accountId?, searchQuery?, limit, offset]
-    const params: (string | number)[] = [shopId]
+    // Build params array: [shopId, accountId?, searchQuery?, publishedFilter?, limit, offset]
+    const params: (string | number | boolean)[] = [shopId]
     let paramNum = 2
 
     let whereClauses = ['fj.shop_id = $1']
@@ -49,6 +50,17 @@ export default defineEventHandler(async (event) => {
       paramNum++
     }
 
+    if (publishedFilter) {
+      if (publishedFilter === 'true') {
+        whereClauses.push(`fj.published = $${paramNum}::boolean`)
+        params.push(true)
+        paramNum++
+      } else {
+        // 'false' filter: match both false AND NULL values (no parameter needed)
+        whereClauses.push(`fj.published IS NOT true`)
+      }
+    }
+
     if (hasSearchQuery && searchQuery) {
       whereClauses.push(`(ai.name ILIKE $${paramNum} OR dn.display_name ILIKE $${paramNum})`)
       params.push(searchQuery)
@@ -63,11 +75,13 @@ export default defineEventHandler(async (event) => {
 
     // New query using bre_file_junction as the primary filter
     // Aggregates all account names per file using a subquery
+    // Returns published status from bre_file_junction using BOOL_OR (PostgreSQL boolean OR aggregate)
     const rawQuery = `
       SELECT
         ai.fileid AS "fileId",
         ai.name AS "filename",
         ai.preview_url AS "previewUrl",
+        BOOL_OR(fj.published) AS "published",
         MAX(dn.display_name) AS "displayName",
         (ARRAY_AGG(DISTINCT fj.account_id)) AS "accountIds",
         (
