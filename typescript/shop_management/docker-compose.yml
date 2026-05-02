@@ -28,7 +28,7 @@ services:
     tty: true
 
   db:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     environment:
       - POSTGRES_DB=shop_management
       - POSTGRES_USER=postgres

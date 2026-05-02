@@ -38,18 +38,21 @@ class RAGSearch:
             "doc_embeddings_meta.json"
         )
     
-    def search(self, query: str, top_k: int = 24, 
-               preview_size: int = 540) -> Dict:
+    def search(self, query: str, top_k: int = 24,
+               preview_size: int = 540, min_similarity: float = 0.25,
+               offset: int = 0) -> Dict:
         """
         Perform semantic search.
         
         Args:
             query: Natural language search query.
-            top_k: Number of results to return.
+            top_k: Number of results to return per page.
             preview_size: Preview image size.
+            min_similarity: Minimum similarity threshold (0.0 to 1.0).
+            offset: Number of top results to skip (for pagination).
             
         Returns:
-            Dict with 'results' list and 'query_time_ms'.
+            Dict with 'results' list, 'query_time_ms', 'has_more', and 'total_matching'.
         """
         start_time = time.time()
         
@@ -67,27 +70,38 @@ class RAGSearch:
         
         if file_embeddings is None or file_embeddings.shape[0] == 0:
             elapsed = (time.time() - start_time) * 1000
-            return {"results": [], "query_time_ms": round(elapsed, 2)}
+            return {"results": [], "query_time_ms": round(elapsed, 2), "has_more": False, "total_matching": 0}
         
         file_ids = self.tfidf_index.file_ids
         
         # Compute cosine similarity
         similarities = self._compute_similarity(query_embedding, file_embeddings)
         
-        # Get top-k results
-        top_indices = np.argsort(similarities)[::-1][:top_k]
-        top_scores = similarities[top_indices]
+        # Sort by similarity descending
+        sorted_indices = np.argsort(similarities)[::-1]
+        sorted_scores = similarities[sorted_indices]
+        
+        # Filter by minimum similarity
+        above_threshold_mask = sorted_scores >= min_similarity
+        filtered_indices = sorted_indices[above_threshold_mask]
+        filtered_scores = sorted_scores[above_threshold_mask]
+        
+        total_matching = len(filtered_indices)
+        
+        # Apply offset for pagination
+        paginated_indices = filtered_indices[offset:offset + top_k]
+        paginated_scores = filtered_scores[offset:offset + top_k]
         
         # Fetch file metadata
-        top_file_ids = [file_ids[i] for i in top_indices]
-        file_metadata = self.database.get_file_metadata(top_file_ids)
+        paginated_file_ids = [file_ids[i] for i in paginated_indices]
+        file_metadata = self.database.get_file_metadata(paginated_file_ids)
         
         # Build metadata lookup
         metadata_map = {str(fm["fileid"]): fm for fm in file_metadata}
         
         # Build results
         results = []
-        for idx, score in zip(top_indices, top_scores):
+        for idx, score in zip(paginated_indices, paginated_scores):
             file_id = file_ids[idx]
             metadata = metadata_map.get(file_id, {})
             
@@ -96,18 +110,23 @@ class RAGSearch:
                 "filename": metadata.get("name", ""),
                 "similarity": round(float(score), 4),
                 "preview_url": self._build_preview_url(
-                    metadata.get("preview_url", ""), 
+                    metadata.get("preview_url", ""),
                     preview_size
                 ),
             }
             results.append(result)
         
+        has_more = (offset + len(results)) < total_matching
+        
         elapsed = (time.time() - start_time) * 1000
-        logger.info(f"Search completed: {len(results)} results in {elapsed:.2f}ms")
+        logger.info(f"Search completed: {len(results)} results shown, {total_matching} total matching (min_sim={min_similarity}) in {elapsed:.2f}ms")
         
         return {
             "results": results,
-            "query_time_ms": round(elapsed, 2)
+            "query_time_ms": round(elapsed, 2),
+            "has_more": has_more,
+            "total_matching": total_matching,
+            "min_similarity": min_similarity
         }
     
     def _encode_query(self, model, query: str) -> np.ndarray:

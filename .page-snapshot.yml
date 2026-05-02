@@ -1,0 +1,62 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - complementary [ref=e4]:
+      - generic [ref=e5]:
+        - heading "Art Management" [level=1] [ref=e6]
+        - button "Collapse sidebar" [ref=e7] [cursor=pointer]:
+          - img [ref=e8]
+      - navigation [ref=e10]:
+        - list [ref=e11]:
+          - listitem [ref=e12]:
+            - link "🏪 Shops & Accounts" [ref=e13] [cursor=pointer]:
+              - /url: /shops
+              - generic [ref=e14]: 🏪
+              - generic [ref=e15]: Shops & Accounts
+          - listitem [ref=e16]:
+            - link "📁 Files" [ref=e17] [cursor=pointer]:
+              - /url: /files
+              - generic [ref=e18]: 📁
+              - generic [ref=e19]: Files
+          - listitem [ref=e20]:
+            - link "🔗 Linked Files" [ref=e21] [cursor=pointer]:
+              - /url: /linked-files
+              - generic [ref=e22]: 🔗
+              - generic [ref=e23]: Linked Files
+          - listitem [ref=e24]:
+            - link "📊 Performance" [ref=e25] [cursor=pointer]:
+              - /url: /performance
+              - generic [ref=e26]: 📊
+              - generic [ref=e27]: Performance
+          - listitem [ref=e28]:
+            - link "⚙️ Settings" [ref=e29] [cursor=pointer]:
+              - /url: /settings
+              - generic [ref=e30]: ⚙️
+              - generic [ref=e31]: Settings
+      - paragraph [ref=e33]: Shop Management v0.0.1
+    - main [ref=e34]:
+      - generic [ref=e36]:
+        - generic [ref=e37]:
+          - heading "Files" [level=1] [ref=e38]
+          - paragraph [ref=e39]: Search, browse, and link files to your shops
+        - generic [ref=e41]:
+          - button "Semantic Search" [ref=e42] [cursor=pointer]
+          - button "Name Search" [ref=e43] [cursor=pointer]
+          - button "Browse All" [ref=e44] [cursor=pointer]
+          - button "Reverse Search" [ref=e45] [cursor=pointer]
+        - generic [ref=e47]:
+          - generic [ref=e48]:
+            - img [ref=e49]
+            - textbox "Search with natural language... (e.g., green landscape painting for living room)" [ref=e52]
+          - button "Search" [disabled] [ref=e53]:
+            - img [ref=e54]
+            - text: Search
+  - generic:
+    - img
+  - generic [ref=e57]:
+    - button "Toggle Nuxt DevTools" [ref=e58] [cursor=pointer]:
+      - img [ref=e59]
+    - generic "Page load time" [ref=e62]:
+      - generic [ref=e63]: "48"
+      - generic [ref=e64]: ms
+    - button "Toggle Component Inspector" [ref=e66] [cursor=pointer]:
+      - img [ref=e67]

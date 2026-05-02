@@ -32,13 +32,21 @@ logger = logging.getLogger(__name__)
 
 class SearchRequest(BaseModel):
     query: str = Field(..., description="Natural language search query")
-    top_k: int = Field(default=24, ge=1, le=100, description="Number of results")
+    top_k: int = Field(default=24, ge=1, le=200, description="Number of results per page")
     preview_size: int = Field(default=540, ge=64, le=2048, description="Preview dimension")
+    min_similarity: float = Field(default=0.25, ge=0.0, le=1.0, description="Minimum similarity threshold")
+    offset: int = Field(default=0, ge=0, description="Offset for pagination")
 
 
 class SearchResponse(BaseModel):
     results: List[Dict]
     query_time_ms: float
+    has_more: bool = False
+    total_matching: int = 0
+    min_similarity: float = 0.25
+    has_more: bool = False
+    total_matching: int = 0
+    min_similarity: float = 0.25
 
 
 class ModelInfo(BaseModel):
@@ -177,10 +185,21 @@ async def search(request: SearchRequest):
     result = rag_search.search(
         query=request.query,
         top_k=request.top_k,
-        preview_size=request.preview_size
+        preview_size=request.preview_size,
+        min_similarity=request.min_similarity,
+        offset=request.offset
     )
     
-    return SearchResponse(**result)
+    # Add pagination info to response
+    response_data = {
+        "results": result["results"],
+        "query_time_ms": result["query_time_ms"],
+        "has_more": len(result["results"]) >= request.top_k,
+        "total_matching": result.get("total_matching", None),
+        "min_similarity": request.min_similarity
+    }
+    
+    return response_data
 
 
 @app.get("/api/v1/rag/models", response_model=List[ModelInfo])

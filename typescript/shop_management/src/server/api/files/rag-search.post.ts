@@ -5,13 +5,15 @@
  *
  * Request body:
  *   - query: Search query (required)
- *   - top_k: Max results (default: 24)
+ *   - top_k: Max results per page (default: 24)
  *   - previewSize: Preview dimension (default: 540)
+ *   - min_similarity: Minimum similarity threshold (default: 0.25)
+ *   - offset: Pagination offset (default: 0)
  */
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
-  const { query, top_k = 24, previewSize = 540 } = body
+  const { query, top_k = 24, previewSize = 540, min_similarity = 0.25, offset = 0 } = body
 
   if (!query || !query.trim()) {
     throw createError({
@@ -28,7 +30,9 @@ export default defineEventHandler(async (event) => {
       body: {
         query: query.trim(),
         top_k,
-        preview_size: previewSize
+        preview_size: previewSize,
+        min_similarity,
+        offset
       }
     })
 

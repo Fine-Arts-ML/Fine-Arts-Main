@@ -32,7 +32,9 @@ export default defineEventHandler(async (event) => {
         `SELECT
           sa.account_id AS "accountId",
           sa.account_name AS "accountName",
-          COUNT(fj.file_id) AS "fileCount"
+          COUNT(fj.file_id) AS "fileCount",
+          COUNT(fj.file_id) FILTER (WHERE fj.published = true) AS "publishedCount",
+          COUNT(fj.file_id) FILTER (WHERE fj.published = false) AS "unpublishedCount"
         FROM bre_shop_account sa
         INNER JOIN bre_file_junction fj ON sa.account_id = fj.account_id
         WHERE fj.shop_id = $1

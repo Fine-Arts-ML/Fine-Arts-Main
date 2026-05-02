@@ -102,30 +102,19 @@ function toggleSidebar() {
               active-class="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
               inactive-class="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
             >
+              <span class="text-xl">📁</span>
+              <span class="font-medium">Files</span>
+            </NuxtLink>
+          </li>
+          <li>
+            <NuxtLink
+              to="/linked-files"
+              class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors"
+              active-class="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+              inactive-class="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+            >
               <span class="text-xl">🔗</span>
               <span class="font-medium">Linked Files</span>
-            </NuxtLink>
-          </li>
-          <li>
-            <NuxtLink
-              to="/link-files"
-              class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors"
-              active-class="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-              inactive-class="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-            >
-              <span class="text-xl">🔍</span>
-              <span class="font-medium">Link Files</span>
-            </NuxtLink>
-          </li>
-          <li>
-            <NuxtLink
-              to="/browse"
-              class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors"
-              active-class="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-              inactive-class="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-            >
-              <span class="text-xl">📂</span>
-              <span class="font-medium">Browse Files</span>
             </NuxtLink>
           </li>
           <li>
