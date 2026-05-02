@@ -1,8 +1,15 @@
 """Configuration for the RAG Search service."""
 
 import os
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Dict, List
+
+# Resolve models directory relative to project root
+_RAG_SEARCH_DIR = Path(__file__).resolve().parent
+_PROJECT_ROOT = _RAG_SEARCH_DIR.parent.parent
+_DEFAULT_MODELS_DIR = str(_PROJECT_ROOT / "py-code" / "Models")
+_DEFAULT_INDEX_DIR = str(_PROJECT_ROOT / "tfidf-index")
 
 
 @dataclass
@@ -30,7 +37,7 @@ class RAGConfig:
     db_password: str = os.getenv("DB_PASSWORD", "postgres")
     
     # Model configuration
-    models_dir: str = os.getenv("MODELS_DIR", "/py-code/Models")
+    models_dir: str = os.getenv("MODELS_DIR", _DEFAULT_MODELS_DIR)
     default_model: str = os.getenv("DEFAULT_MODEL", "qwen3-0.6b")
     max_cached_models: int = int(os.getenv("MAX_CACHED_MODELS", "1"))
     
@@ -77,7 +84,7 @@ class RAGConfig:
     port: int = int(os.getenv("PORT", "8079"))
     
     # TF-IDF index path
-    index_dir: str = os.getenv("INDEX_DIR", "/data/tfidf-index")
+    index_dir: str = os.getenv("INDEX_DIR", _DEFAULT_INDEX_DIR)
     
     def get_connection_string(self) -> str:
         """Get SQLAlchemy connection string."""

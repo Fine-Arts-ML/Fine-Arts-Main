@@ -23,3 +23,5 @@ Shops_content/
 playwright-output/
 typescript/shop_management/src/py-code/Models/*
 typescript/shop_management/src/py-code/tfidf-index/*
+typescript/shop_management/tfidf-index/*
+.gitignore

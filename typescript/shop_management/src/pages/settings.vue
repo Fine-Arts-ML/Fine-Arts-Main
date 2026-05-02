@@ -209,6 +209,7 @@ useHead({
             :class="selectedModel === model.id
               ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/50 ring-1 ring-blue-500'
               : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'"
+            @click="switchModel(model.id)"
           >
             <input
               type="radio"

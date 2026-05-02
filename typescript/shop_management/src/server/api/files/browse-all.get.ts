@@ -15,6 +15,9 @@ export default defineEventHandler(async (event) => {
     const sortBy = getQuery(event).sortBy as string || 'fileid'
     const sortOrder = (getQuery(event).sortOrder as string) || 'asc'
 
+    // DIAGNOSTIC LOGGING
+    console.log(`[BROWSE-ALL] REQUEST: limit=${limit}, offset=${offset}, sortBy=${sortBy}, sortOrder=${sortOrder}`)
+
     // Validate sortBy against whitelist
     const validSortBy: string[] = ['fileid', 'name']
     if (!validSortBy.includes(sortBy)) {
@@ -68,7 +71,14 @@ export default defineEventHandler(async (event) => {
         params
       )
 
-      return (result as any).rows
+      const rows = (result as any).rows
+      console.log(`[BROWSE-ALL] RESPONSE: offset=${offset}, limit=${limit}, rowsReturned=${rows.length}, hasMore=${rows.length >= limit}`)
+      
+      if (rows.length > 0 && rows.length < limit) {
+        console.log(`[BROWSE-ALL] WARNING: Returned ${rows.length} rows which is less than limit ${limit} - this will stop infinite scroll!`)
+      }
+
+      return rows
     } finally {
       await pool.end()
     }

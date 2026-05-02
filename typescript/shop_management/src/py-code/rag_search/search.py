@@ -39,7 +39,7 @@ class RAGSearch:
         )
     
     def search(self, query: str, top_k: int = 24,
-               preview_size: int = 540, min_similarity: float = 0.25,
+               preview_size: int = 540, min_similarity: float = 0.30,
                offset: int = 0) -> Dict:
         """
         Perform semantic search.

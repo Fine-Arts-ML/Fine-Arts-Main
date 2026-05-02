@@ -30,7 +30,9 @@ const ragResults = ref<SearchResult[]>([])
 const ragQueryTimeMs = ref(0)
 const ragSearchQuery = ref('')
 const semanticSentinelRef = ref<HTMLElement | null>(null)
+const semanticSearchContainerRef = ref<HTMLElement | null>(null)
 let semanticSearchObserver: IntersectionObserver | null = null
+const semanticInfiniteScrollActive = ref(false)
 
 // ========== Link Files (name search + reverse search + linking) ==========
 const searchMode = ref<SearchMode>('semantic')
@@ -77,6 +79,7 @@ const sortOrder = ref<SortOrder>('asc')
 const isSortDropdownOpen = ref(false)
 const filterQuery = ref('')
 const showBackToTop = ref(false)
+const showSemanticBackToTop = ref(false)
 const browseContainerRef = ref<HTMLElement | null>(null)
 const sentinelRef = ref<HTMLElement | null>(null)
 
@@ -249,7 +252,7 @@ async function performSemanticSearch() {
 
 // Load more semantic search results (infinite scroll)
 async function loadMoreSemanticResults() {
-  if (!ragHasMore || ragIsLoadingMore) return
+  if (!ragHasMore.value || ragIsLoadingMore.value) return
   try {
     const response = await loadMoreRagSearch({ top_k: SEMANTIC_LIMIT, min_similarity: SEMANTIC_MIN_SIMILARITY })
     // The composable already appends to state.results, but we need to sync with our local ref
@@ -280,15 +283,25 @@ async function performNameSearch() {
 
 // ========== Browse All ==========
 async function fetchBrowseFiles(append = false) {
-  if (browseLoading.value || !browseHasMore.value) return
+  console.log('[BROWSE-ALL-FILES] fetchBrowseFiles called: append=', append, 'browseLoading=', browseLoading.value, 'browseHasMore=', browseHasMore.value, 'offset=', browseOffset.value)
+  if (browseLoading.value || !browseHasMore.value) {
+    console.log('[BROWSE-ALL-FILES] fetchBrowseFiles SKIPPED: loading=', browseLoading.value, 'hasMore=', browseHasMore.value)
+    return
+  }
+  console.log('[BROWSE-ALL-FILES] fetchBrowseFiles PROCEEDING: fetching batch')
   browseLoading.value = true
   try {
     const params = new URLSearchParams({
       limit: String(BROWSE_LIMIT), offset: String(browseOffset.value),
       sortBy: sortBy.value, sortOrder: sortOrder.value,
     })
+    console.log('[BROWSE-ALL-FILES] Fetching URL:', `/api/files/browse-all?${params}`)
     const results = await $fetch<Array<{ fileId: number; filename: string; previewUrl?: string }>>(`/api/files/browse-all?${params}`)
-    if (results.length < BROWSE_LIMIT) browseHasMore.value = false
+    console.log('[BROWSE-ALL-FILES] fetchBrowseFiles RESPONSE: received', results.length, 'results, append=', append, 'allLoaded before=', allLoadedFiles.value.length)
+    if (results.length < BROWSE_LIMIT) {
+      console.log('[BROWSE-ALL-FILES] WARNING: Got', results.length, 'results (< limit', BROWSE_LIMIT, '), setting browseHasMore=false')
+      browseHasMore.value = false
+    }
     if (append) {
       allLoadedFiles.value = [...allLoadedFiles.value, ...results]
       displayedFiles.value = [...displayedFiles.value, ...results]
@@ -297,20 +310,23 @@ async function fetchBrowseFiles(append = false) {
       displayedFiles.value = results
     }
     browseOffset.value += results.length
+    console.log('[BROWSE-ALL-FILES] fetchBrowseFiles COMPLETE: offset=', browseOffset.value, 'displayed=', displayedFiles.value.length, 'allLoaded=', allLoadedFiles.value.length, 'hasMore=', browseHasMore.value)
   } catch (err: any) {
-    console.error('Failed to fetch browse files:', err)
+    console.error('[BROWSE-ALL-FILES] Failed to fetch browse files:', err)
   } finally {
     browseLoading.value = false
   }
 }
 
 function resetBrowseAll() {
+  console.log('[BROWSE-ALL-FILES] resetBrowseAll called')
   allLoadedFiles.value = []
   displayedFiles.value = []
   browseOffset.value = 0
   browseHasMore.value = true
   filterQuery.value = ''
   showBackToTop.value = false
+  console.log('[BROWSE-ALL-FILES] resetBrowseAll calling fetchBrowseFiles')
   fetchBrowseFiles()
 }
 
@@ -402,17 +418,21 @@ function setupSemanticSearchObserver() {
     semanticSearchObserver.disconnect()
   }
 
+  // Use the scrollable container as root so the observer triggers when the sentinel
+  // scrolls into view within the container (not just the viewport).
+  const container = semanticSearchContainerRef.value
+  if (!container) return
+
   semanticSearchObserver = new IntersectionObserver((entries) => {
     entries.forEach((entry) => {
-      if (entry.isIntersecting && ragHasMore && !ragIsLoadingMore && searchMode.value === 'semantic') {
-        console.log('[semantic-infinite-scroll] Sentinel visible, loading more...')
+      if (entry.isIntersecting && ragHasMore.value && !ragIsLoadingMore.value && searchMode.value === 'semantic') {
         loadMoreSemanticResults()
       }
     })
-  }, { threshold: 0.1 })
+  }, { root: container, threshold: 0.1 })
 
   semanticSearchObserver.observe(sentinel)
-  console.log('[semantic-infinite-scroll] Intersection Observer set up')
+  semanticInfiniteScrollActive.value = true
 }
 
 function teardownSemanticSearchObserver() {
@@ -420,12 +440,12 @@ function teardownSemanticSearchObserver() {
     semanticSearchObserver.disconnect()
     semanticSearchObserver = null
   }
-  console.log('[semantic-infinite-scroll] Intersection Observer torn down')
+  semanticInfiniteScrollActive.value = false
 }
 
 // Watch for semantic search results to set up observer
 watch(ragResults, () => {
-  if (searchMode.value === 'semantic' && ragResults.value.length > 0 && ragHasMore) {
+  if (searchMode.value === 'semantic' && ragResults.value.length > 0 && ragHasMore.value) {
     nextTick(() => setupSemanticSearchObserver())
   }
 }, { deep: true })
@@ -434,7 +454,7 @@ watch(ragResults, () => {
 watch(searchMode, (newMode) => {
   if (newMode !== 'semantic') {
     teardownSemanticSearchObserver()
-  } else if (ragResults.value.length > 0 && ragHasMore) {
+  } else if (ragResults.value.length > 0 && ragHasMore.value) {
     nextTick(() => setupSemanticSearchObserver())
   }
 })
@@ -454,51 +474,95 @@ let intersectionObserver: IntersectionObserver | null = null
 function handleScroll() {
   const container = browseContainerRef.value
   if (!container) return
-  showBackToTop.value = container.scrollTop > container.clientHeight
+  
+  const scrollTop = container.scrollTop
+  const scrollHeight = container.scrollHeight
+  const clientHeight = container.clientHeight
+  const scrollRemaining = scrollHeight - scrollTop - clientHeight
+  
+  showBackToTop.value = scrollTop > clientHeight
+  
+  // Infinite scroll: trigger when within 200px of the bottom
+  if (scrollRemaining <= 200 && browseHasMore.value && !browseLoading.value) {
+    console.log('[BROWSE-ALL-FILES] handleScroll: Near bottom (scrollRemaining=', scrollRemaining, '), triggering fetchBrowseFiles(true)')
+    fetchBrowseFiles(true)
+  }
 }
 
-function scrollToTop() {
-  const container = browseContainerRef.value
+// ========== Semantic Search Scroll Handler ==========
+let semanticScrollCleanup: (() => void) | null = null
+
+function handleSemanticScroll() {
+  const container = semanticSearchContainerRef.value
+  if (!container) return
+  showSemanticBackToTop.value = container.scrollTop > container.clientHeight
+}
+
+function scrollToSemanticTop() {
+  const container = semanticSearchContainerRef.value
   if (container) {
     container.scrollTo({ top: 0, behavior: 'smooth' })
   }
 }
 
 function setupIntersectionObserver() {
+  console.log('[BROWSE-ALL-FILES] setupIntersectionObserver called')
   const sentinel = sentinelRef.value
-  if (!sentinel) return
+  console.log('[BROWSE-ALL-FILES] sentinelRef.value:', sentinel)
+  if (!sentinel) {
+    console.log('[BROWSE-ALL-FILES] ABORTING: sentinelRef.value is null')
+    return
+  }
 
   // Disconnect existing observer to avoid duplicates
   if (intersectionObserver) {
+    console.log('[BROWSE-ALL-FILES] Disconnecting existing observer')
     intersectionObserver.disconnect()
   }
 
+  const container = browseContainerRef.value
+  console.log('[BROWSE-ALL-FILES] browseContainerRef.value:', container)
+  console.log('[BROWSE-ALL-FILES] Sentinel element:', sentinel.outerHTML?.substring(0, 100) || sentinel)
+  
+  // Check if sentinel is within the container
+  if (container && !container.contains(sentinel)) {
+    console.warn('[BROWSE-ALL-FILES] WARNING: Sentinel is NOT a child of the scroll container!')
+  }
+
   intersectionObserver = new IntersectionObserver((entries) => {
+    console.log('[BROWSE-ALL-FILES] IntersectionObserver callback fired: entries.length=', entries.length)
     entries.forEach((entry) => {
+      console.log('[BROWSE-ALL-FILES] Entry details: isIntersecting=', entry.isIntersecting, 'intersectionRatio=', entry.intersectionRatio, 'browseHasMore=', browseHasMore.value, 'browseLoading=', browseLoading.value)
       if (entry.isIntersecting && browseHasMore.value && !browseLoading.value) {
-        console.log('[infinite-scroll] Sentinel visible, loading more...')
+        console.log('[BROWSE-ALL-FILES] Sentinel visible, triggering fetchBrowseFiles(true)')
         fetchBrowseFiles(true)
+      } else {
+        console.log('[BROWSE-ALL-FILES] Sentinel NOT triggering: isIntersecting=', entry.isIntersecting, 'hasMore=', browseHasMore.value, 'loading=', browseLoading.value)
       }
     })
   }, { root: browseContainerRef.value, threshold: 0.1 })
 
   intersectionObserver.observe(sentinel)
-  console.log('[infinite-scroll] Intersection Observer set up')
+  console.log('[BROWSE-ALL-FILES] IntersectionObserver now observing sentinel, root=', browseContainerRef.value)
 }
 
 function setupBrowseAllScroll() {
-  console.log('[infinite-scroll] Setting up Browse All scroll listeners')
+  console.log('[BROWSE-ALL-FILES] setupBrowseAllScroll called')
   nextTick(() => {
     const container = browseContainerRef.value
+    console.log('[BROWSE-ALL-FILES] setupBrowseAllScroll nextTick: container=', container)
     if (container) {
       // Remove old listener if any
       if (scrollCleanup) {
+        console.log('[BROWSE-ALL-FILES] Removing old scroll listener')
         scrollCleanup()
         scrollCleanup = null
       }
+      console.log('[BROWSE-ALL-FILES] Adding scroll listener to container')
       container.addEventListener('scroll', handleScroll, { passive: true })
       scrollCleanup = () => container.removeEventListener('scroll', handleScroll)
-      console.log('[infinite-scroll] Scroll listener attached')
+    } else {
+      console.warn('[BROWSE-ALL-FILES] WARNING: browseContainerRef.value is null in nextTick!')
     }
     setupIntersectionObserver()
   })
@@ -516,14 +580,33 @@ function teardownBrowseAllScroll() {
   }
 }
 
+function scrollToTop() {
+  const container = browseContainerRef.value
+  if (container) {
+    container.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+}
+
 onMounted(async () => {
   await fetchShops()
   document.addEventListener('click', handleDocumentClick)
+  // Set up semantic search scroll listener
+  nextTick(() => {
+    const container = semanticSearchContainerRef.value
+    if (container) {
+      container.addEventListener('scroll', handleSemanticScroll, { passive: true })
+      semanticScrollCleanup = () => container.removeEventListener('scroll', handleSemanticScroll)
+    }
+  })
 })
 
 onUnmounted(() => {
   document.removeEventListener('click', handleDocumentClick)
   teardownBrowseAllScroll()
+  if (semanticScrollCleanup) {
+    semanticScrollCleanup()
+    semanticScrollCleanup = null
+  }
 })
 
 // Watch for mode changes to set up/teardown scroll listeners
@@ -568,13 +651,23 @@ useHead({ title: 'Files - Art Management' })
 
     <!-- ==================== SEARCH MODES (Semantic + Name) ==================== -->
     <div v-if="isSearchMode" class="bg-white dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+      <!-- Back to Top Button -->
+      <button
+        v-show="searchMode === 'semantic' && showSemanticBackToTop && currentResults.length > 0"
+        @click="scrollToSemanticTop"
+        class="absolute bottom-4 right-4 z-30 p-2.5 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-all hover:scale-110 flex items-center justify-center"
+        title="Back to top"
+      >
+        <SortAsc class="w-5 h-5" />
+      </button>
+
       <!-- Search Input -->
       <div class="mb-6 flex gap-2">
         <div class="relative flex-1">
           <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
           <input
             v-model="searchQuery"
-            :placeholder="searchMode === 'semantic' ? 'Search with natural language... (e.g., green landscape painting for living room)' : 'Search by filename or display name...'"
+            :placeholder="searchMode === 'semantic' ? 'Search with natural language... (e.g., green landscape painting)' : 'Search by filename or display name...'"
             class="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             @keyup.enter="handleSearchSubmit"
           />
@@ -599,7 +692,7 @@ useHead({ title: 'Files - Art Management' })
 
       <!-- Search Info -->
       <div v-if="ragQueryTimeMs > 0 && searchMode === 'semantic'" class="mb-4 text-sm text-gray-500 dark:text-gray-400">
-        Found {{ currentResults.length }} of {{ ragTotalMatching }} matching results (min. similarity: {{ (ragMinSimilarity * 100).toFixed(0) }}%) · Loaded in {{ ragQueryTimeMs }}ms
+        Found {{ ragTotalMatching }} matching results
       </div>
 
       <!-- Error Message -->
@@ -616,99 +709,106 @@ useHead({ title: 'Files - Art Management' })
         <AlertCircle class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
         <div>
           <p class="text-amber-800 dark:text-amber-200 font-medium">No files matched your search description</p>
-          <p class="text-amber-600 dark:text-amber-400 text-sm mt-1">Try rephrasing your query, using simpler terms, or describing visual characteristics (e.g., "abstract geometric pattern", "soft pastel landscape"). Currently filtering for similarity ≥ {{ (ragMinSimilarity * 100).toFixed(0) }}%.</p>
+          <p class="text-amber-600 dark:text-amber-400 text-sm mt-1">Try rephrasing your query, using simpler terms, or describing visual characteristics (e.g., "abstract geometric pattern", "soft pastel landscape").</p>
         </div>
       </div>
 
-      <!-- Results Grid + Infinite Scroll Controls -->
-      <div v-if="currentResults.length > 0" class="space-y-4">
-        <!-- Results Grid -->
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 w-full">
-          <div
-            v-for="(result, index) in currentResults"
-            :key="index"
-            class="group bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-lg hover:border-blue-300 dark:hover:border-blue-600 transition-all cursor-pointer relative"
-          >
-            <!-- Image -->
-            <div class="aspect-square bg-gray-100 dark:bg-gray-900 relative overflow-hidden">
-              <img
-                :src="getPreviewUrl(getFileId(result), 540)"
-                :alt="getFilename(result)"
-                class="w-full h-full object-cover transition-transform group-hover:scale-105"
-                loading="lazy"
-                @error="e => (e.target as HTMLImageElement).style.display = 'none'"
-              />
-              <!-- Similarity Badge (semantic only) -->
-              <div v-if="'similarity' in result" class="absolute top-2 right-2 px-2 py-1 bg-black/70 text-white text-xs rounded-full">
-                {{ formatSimilarity((result as SearchResult).similarity) }}
-              </div>
-              <!-- Enlarge Icon -->
-              <button
-                class="absolute top-2 left-2 z-10 p-1.5 rounded-md bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/70"
-                @click.stop.prevent="openPreviewModal(getFileId(result), getFilename(result))"
-              >
-                <Maximize2 class="w-3.5 h-3.5" />
-              </button>
-              <!-- Link Button (bottom-right, always visible on hover) -->
-              <button
-                class="absolute bottom-2 right-2 z-20 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-700 flex items-center gap-1.5 shadow-lg"
-                @click.stop="openLinkMenu(result)"
-              >
-                <ChevronRight class="w-3.5 h-3.5" />
-                Link
-              </button>
-            </div>
-            <!-- File Info -->
-            <div class="p-2">
-              <p class="text-sm text-gray-900 dark:text-gray-100 truncate" :title="getFilename(result)">
-                {{ getFilename(result) }}
-              </p>
-              <p v-if="'displayName' in result && (result as any).displayName" class="text-[10px] text-gray-500 dark:text-gray-400 truncate">
-                {{ (result as any).displayName }}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <!-- Bottom section: Loading spinner, sentinel, and Load More button -->
-        <div class="flex flex-col items-center gap-4 py-4">
-          <!-- Infinite Scroll Loading Spinner (between pages for semantic search) -->
-          <div v-if="ragIsLoadingMore" class="text-center py-2">
-            <Loader2 class="w-6 h-6 text-gray-400 mx-auto animate-spin" />
-            <p class="text-gray-500 dark:text-gray-400 text-sm mt-2">Loading more results...</p>
-          </div>
-
-          <!-- Sentinel for Intersection Observer (infinite scroll trigger) - hidden visually -->
-          <div v-if="searchMode === 'semantic' && ragHasMore" ref="semanticSentinelRef" class="w-full h-px" />
-
-          <!-- Load More Button (fallback for users without IntersectionObserver support) -->
-          <div v-if="searchMode === 'semantic' && ragHasMore && !ragIsLoadingMore" class="text-center w-full">
-            <button
-              @click="loadMoreSemanticResults"
-              class="px-8 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center gap-2 mx-auto shadow-md"
+      <!-- Scrollable Container for Semantic Search Results -->
+      <div
+        ref="semanticSearchContainerRef"
+        class="max-h-[calc(90vh-14rem)] overflow-y-auto flex flex-col min-h-full"
+        :class="{ 'pb-16': currentResults.length > 0 }"
+      >
+        <!-- Results Grid + Infinite Scroll Controls -->
+        <div v-if="currentResults.length > 0" class="space-y-4">
+          <!-- Results Grid -->
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 gap-4 w-full">
+            <div
+              v-for="(result, index) in currentResults"
+              :key="index"
+              class="group bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-lg hover:border-blue-300 dark:hover:border-blue-600 transition-all cursor-pointer relative"
             >
-              <Loader2 v-if="ragIsLoadingMore" class="w-5 h-5 animate-spin" />
-              <Search v-else class="w-5 h-5" />
-              Load More Results
-            </button>
+              <!-- Image -->
+              <div class="aspect-square bg-gray-100 dark:bg-gray-900 relative overflow-hidden">
+                <img
+                  :src="getPreviewUrl(getFileId(result), 540)"
+                  :alt="getFilename(result)"
+                  class="w-full h-full object-cover transition-transform group-hover:scale-105"
+                  loading="lazy"
+                  @error="e => (e.target as HTMLImageElement).style.display = 'none'"
+                />
+                <!-- Similarity Badge (semantic only) -->
+                <div v-if="'similarity' in result" class="absolute top-2 right-2 px-2 py-1 bg-black/70 text-white text-xs rounded-full">
+                  {{ formatSimilarity((result as SearchResult).similarity) }}
+                </div>
+                <!-- Enlarge Icon -->
+                <button
+                  class="absolute top-2 left-2 z-10 p-1.5 rounded-md bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/70"
+                  @click.stop.prevent="openPreviewModal(getFileId(result), getFilename(result))"
+                >
+                  <Maximize2 class="w-3.5 h-3.5" />
+                </button>
+                <!-- Link Button (bottom-right, always visible on hover) -->
+                <button
+                  class="absolute bottom-2 right-2 z-20 px-3 py-1.5 rounded-lg bg-blue-600 text-white text-sm font-medium opacity-0 group-hover:opacity-100 transition-opacity hover:bg-blue-700 flex items-center gap-1.5 shadow-lg"
+                  @click.stop="openLinkMenu(result)"
+                >
+                  <ChevronRight class="w-3.5 h-3.5" />
+                  Link
+                </button>
+              </div>
+              <!-- File Info -->
+              <div class="p-2">
+                <p class="text-sm text-gray-900 dark:text-gray-100 truncate" :title="getFilename(result)">
+                  {{ getFilename(result) }}
+                </p>
+                <p v-if="'displayName' in result && (result as any).displayName" class="text-[10px] text-gray-500 dark:text-gray-400 truncate">
+                  {{ (result as any).displayName }}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom section: Loading spinner, sentinel, and Load More button -->
+          <div class="flex flex-col items-center gap-4 py-4">
+            <!-- Infinite Scroll Loading Spinner (between pages for semantic search) -->
+            <div v-if="ragIsLoadingMore" class="text-center py-2">
+              <Loader2 class="w-6 h-6 text-gray-400 mx-auto animate-spin" />
+              <p class="text-gray-500 dark:text-gray-400 text-sm mt-2">Loading more results...</p>
+            </div>
+
+            <!-- Sentinel for Intersection Observer (infinite scroll trigger) - hidden visually -->
+            <div v-if="searchMode === 'semantic' && ragHasMore" ref="semanticSentinelRef" class="w-full h-px" />
+
+            <!-- Load More Button (fallback for users without IntersectionObserver support) -->
+            <div v-if="searchMode === 'semantic' && ragHasMore && !ragIsLoadingMore && !semanticInfiniteScrollActive" class="text-center w-full">
+              <button
+                @click="loadMoreSemanticResults"
+                class="px-8 py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center gap-2 mx-auto shadow-md"
+              >
+                <Loader2 v-if="ragIsLoadingMore" class="w-5 h-5 animate-spin" />
+                <Search v-else class="w-5 h-5" />
+                Load More Results
+              </button>
+            </div>
           </div>
         </div>
-      </div>
 
-      <!-- Loading State (initial search) -->
-      <div v-if="searchLoading" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 w-full">
-        <div v-for="i in 6" :key="i" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden animate-pulse">
-          <div class="aspect-square bg-gray-200 dark:bg-gray-700" />
-          <div class="p-2"><div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4" /></div>
+        <!-- Loading State (initial search) -->
+        <div v-if="searchLoading" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 w-full">
+          <div v-for="i in 6" :key="i" class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden animate-pulse">
+            <div class="aspect-square bg-gray-200 dark:bg-gray-700" />
+            <div class="p-2"><div class="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4" /></div>
+          </div>
+        </div>
+
+        <!-- Empty State -->
+        <div v-if="!searchLoading && searchQuery && !searchError && currentResults.length === 0 && ragTotalMatching === 0 && ragQueryTimeMs !== 0" class="text-center py-12">
+          <ImageIcon class="w-12 h-12 text-gray-400 mx-auto mb-4" />
+          <p class="text-gray-500 dark:text-gray-400 text-lg">No results found</p>
         </div>
       </div>
 
-      <!-- Empty State -->
-      <div v-if="!searchLoading && searchQuery && !searchError && currentResults.length === 0 && ragTotalMatching === 0" class="text-center py-12">
-        <ImageIcon class="w-12 h-12 text-gray-400 mx-auto mb-4" />
-        <p class="text-gray-500 dark:text-gray-400 text-lg">No results found</p>
-        <p class="text-gray-400 dark:text-gray-500 text-sm mt-1">Try a different search term</p>
-      </div>
     </div>
 
     <!-- ==================== BROWSE ALL MODE ==================== -->
@@ -770,7 +870,7 @@ useHead({ title: 'Files - Art Management' })
       <!-- Scrollable Container -->
       <div
         ref="browseContainerRef"
-        class="max-h-[calc(100vh-14rem)] overflow-y-auto flex flex-col min-h-full justify-between"
+        class="max-h-[calc(90vh-14rem)] overflow-y-auto flex flex-col min-h-full justify-between"
         :class="{ 'pt-4': filterQuery || browseLoading || filteredFiles.length > 0 }"
       >
         <!-- Loading State -->
@@ -780,7 +880,7 @@ useHead({ title: 'Files - Art Management' })
         </div>
 
         <!-- Results Grid -->
-        <div v-else-if="filteredFiles.length > 0" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 w-full">
+        <div v-else-if="filteredFiles.length > 0" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-3 gap-4 w-full">
         <div
           v-for="file in filteredFiles"
           :key="file.fileId"

@@ -6,10 +6,14 @@ import time
 import logging
 from contextlib import asynccontextmanager
 from typing import Dict, List, Optional
+from dotenv import load_dotenv
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

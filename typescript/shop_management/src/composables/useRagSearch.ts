@@ -29,7 +29,25 @@ export interface UseRagSearchOptions {
   min_similarity?: number
 }
 
-function createSearchState() {
+export interface UseRagSearchState {
+  results: SearchResult[]
+  isLoading: boolean
+  isLoadingMore: boolean
+  error: string | null
+  queryTimeMs: number
+  hasMore: boolean
+  totalMatching: number
+  minSimilarity: number
+}
+
+interface SearchMethods {
+  search: (query: string, options?: UseRagSearchOptions) => Promise<RagSearchResponse>
+  loadMore: (options?: UseRagSearchOptions) => Promise<RagSearchResponse>
+  clearResults: () => void
+  retryLastSearch: () => Promise<RagSearchResponse>
+}
+
+function createSearchState(): UseRagSearchState & SearchMethods {
   return reactive({
     results: [] as SearchResult[],
     isLoading: false,
@@ -38,8 +56,8 @@ function createSearchState() {
     queryTimeMs: 0,
     hasMore: false,
     totalMatching: 0,
-    minSimilarity: 0.25
-  })
+    minSimilarity: 0.30
+  }) as UseRagSearchState & SearchMethods
 }
 
 export function useRagSearch() {
@@ -176,7 +194,7 @@ export function useRagSearch() {
     state.queryTimeMs = 0
     state.hasMore = false
     state.totalMatching = 0
-    state.minSimilarity = 0.25
+    state.minSimilarity = 0.30
     lastQuery = ''
     lastOptions = {}
   }
@@ -208,18 +226,13 @@ export function useRagSearch() {
     return ''
   }
 
-  return {
-    results: state.results,
-    isLoading: state.isLoading,
-    isLoadingMore: state.isLoadingMore,
-    error: state.error,
-    queryTimeMs: state.queryTimeMs,
-    hasMore: state.hasMore,
-    totalMatching: state.totalMatching,
-    minSimilarity: state.minSimilarity,
-    search,
-    loadMore,
-    clearResults,
-    retryLastSearch
-  }
+  // Attach methods to the state object so they're available on the same reactive reference.
+  state.search = search
+  state.loadMore = loadMore
+  state.clearResults = clearResults
+  state.retryLastSearch = retryLastSearch
+
+  // Return the reactive state object directly so Vue tracks changes to all properties.
+  // Destructuring (e.g. totalMatching: state.totalMatching) copies primitive values and breaks reactivity.
+  return state
 }
