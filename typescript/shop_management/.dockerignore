@@ -1,0 +1,65 @@
+# Development
+node_modules
+.nuxt
+.output
+.env.local
+*.log
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+.venv
+.eggs
+*.egg-info
+dist
+build
+.pytest_cache
+.mypy_cache
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*.bak
+
+# Git
+.git
+.gitignore
+
+# Docs
+*.md
+plans/
+TROUBLESHOOTING.md
+
+# Docker
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# Test
+coverage
+.nyc_output
+.nyc_output/
+
+# OS
+.DS_Store
+Thumbs.db
+*.lnk
+
+# Nuxt
+.nuxt
+.output
+
+# Type checking
+tsbuildinfo
+
+# TFIDF index (large binary index files)
+tfidf-index
+*.bin
+Models/
+
+# Memory dump files
+core
+*.core

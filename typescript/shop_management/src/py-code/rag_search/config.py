@@ -11,6 +11,12 @@ _PROJECT_ROOT = _RAG_SEARCH_DIR.parent.parent
 _DEFAULT_MODELS_DIR = str(_PROJECT_ROOT / "py-code" / "Models")
 _DEFAULT_INDEX_DIR = str(_PROJECT_ROOT / "tfidf-index")
 
+# Override with environment variables if set (for Docker compatibility)
+if os.getenv("MODELS_DIR"):
+    _DEFAULT_MODELS_DIR = os.getenv("MODELS_DIR")
+if os.getenv("INDEX_DIR"):
+    _DEFAULT_INDEX_DIR = os.getenv("INDEX_DIR")
+
 
 @dataclass
 class ModelConfig:
@@ -43,16 +49,6 @@ class RAGConfig:
     
     # Available models
     available_models: Dict[str, ModelConfig] = field(default_factory=lambda: {
-        "minilm-l6": ModelConfig(
-            id="minilm-l6",
-            name="MiniLM-L6",
-            description="Fast inference, good accuracy for simple queries",
-            model_path="minilm-l6",
-            params="22M",
-            disk_size="~100MB",
-            ram_usage="~200MB",
-            load_time="~2 seconds"
-        ),
         "qwen3-0.6b": ModelConfig(
             id="qwen3-0.6b",
             name="Qwen3-0.6B",
@@ -63,16 +59,7 @@ class RAGConfig:
             ram_usage="~1.5GB",
             load_time="~10 seconds"
         ),
-        "qwen2b-q4": ModelConfig(
-            id="qwen2b-q4",
-            name="Qwen2B-Q4",
-            description="Balanced accuracy and speed (4-bit quantized)",
-            model_path="qwen2b-q4",
-            params="2B",
-            disk_size="~1.5GB",
-            ram_usage="~2GB",
-            load_time="~8 seconds"
-        ),
+
     })
     
     # Search configuration

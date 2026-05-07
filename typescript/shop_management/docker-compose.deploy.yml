@@ -1,8 +1,11 @@
+# Deployment-ready docker-compose file for pre-built images
+# Use this file after loading exported images on the target server
+# Usage: docker compose -f docker-compose.deploy.yml up -d
+# This uses a Cloudlfare Tunnel to expose the app
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: shop_management-app:latest
+    container_name: shop_management-app
     ports:
       - "3000:3000"
     environment:
@@ -20,6 +23,8 @@ services:
       rag-search:
         condition: service_started
     restart: unless-stopped
+    networks:
+      - shop-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/"]
       interval: 30s
@@ -28,9 +33,8 @@ services:
       start_period: 30s
 
   rag-search:
-    build:
-      context: ./src/py-code/rag_search
-      dockerfile: Dockerfile
+    image: shop_management-rag-search:latest
+    container_name: shop_management-rag-search
     ports:
       - "8079:8079"
     environment:
@@ -46,11 +50,27 @@ services:
       - HOST=0.0.0.0
       - PORT=8079
     volumes:
-      - ./src/rag-models:/app/rag_search/Models
+      - ./rag-models:/app/rag_search/Models
+      - ./tfidf-index:/app/rag_search/tfidf-index
     restart: unless-stopped
+    networks:
+      - shop-network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8079/api/v1/rag/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: shops_cloudflared
+    restart: unless-stopped
+    command: tunnel run --token ${CLOUDFLARE_TOKEN}
+    networks:
+      - shop-network
+
+
+networks:
+  shop-network:
+    driver: bridge

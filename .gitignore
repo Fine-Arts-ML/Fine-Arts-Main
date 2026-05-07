@@ -25,3 +25,15 @@ typescript/shop_management/src/py-code/Models/*
 typescript/shop_management/src/py-code/tfidf-index/*
 typescript/shop_management/tfidf-index/*
 .gitignore
+typescript/shop_management/shop_management-app-latest.tar.gz
+typescript/shop_management/shop_management-rag-search-latest.tar.gz
+typescript/shop_management/src/rag-models/qwen3-0.6b/config_sentence_transformers.json
+typescript/shop_management/src/rag-models/qwen3-0.6b/config.json
+typescript/shop_management/src/rag-models/qwen3-0.6b/generation_config.json
+typescript/shop_management/src/rag-models/qwen3-0.6b/merges.txt
+typescript/shop_management/src/rag-models/qwen3-0.6b/model.safetensors
+typescript/shop_management/src/rag-models/qwen3-0.6b/modules.json
+typescript/shop_management/src/rag-models/qwen3-0.6b/tokenizer_config.json
+typescript/shop_management/src/rag-models/qwen3-0.6b/tokenizer.json
+typescript/shop_management/src/rag-models/qwen3-0.6b/vocab.json
+typescript/shop_management/src/rag-models/qwen3-0.6b/1_Pooling/config.json

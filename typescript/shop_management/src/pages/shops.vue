@@ -44,6 +44,10 @@ const deletingAccount = ref<Record<string, boolean>>({})
 const editingShop = ref<{ id: number; name: string } | null>(null)
 const editingShopName = ref('')
 
+// Edit account dialog state (Account Management tab)
+const editingAccount = ref<{ id: number; name: string } | null>(null)
+const editingAccountName = ref('')
+
 // Link account dialog state
 const linkingShopId = ref<number | null>(null)
 const selectedAccountIds = ref<Set<number>>(new Set())
@@ -255,6 +259,32 @@ async function handleSaveShopName() {
 function closeEditShopDialog() {
   editingShop.value = null
   editingShopName.value = ''
+}
+
+// Edit account handlers (Account Management tab)
+function openEditAccountDialog(account: { account_id: number; account_name: string }) {
+  editingAccount.value = { id: account.account_id, name: account.account_name }
+  editingAccountName.value = account.account_name
+}
+
+async function handleSaveAccountName() {
+  if (!editingAccount.value || !editingAccountName.value.trim()) return
+  try {
+    await $fetch(`/api/accounts/${editingAccount.value.id}`, {
+      method: 'PUT',
+      body: { accountName: editingAccountName.value },
+    })
+    await fetchAccounts()
+    editingAccount.value = null
+    editingAccountName.value = ''
+  } catch (err: any) {
+    alert(err.message || 'Failed to update account name')
+  }
+}
+
+function closeEditAccountDialog() {
+  editingAccount.value = null
+  editingAccountName.value = ''
 }
 
 // Track previous linked accounts for detecting changes
@@ -555,8 +585,9 @@ onMounted(async () => {
                 <td class="px-4 py-3 text-right">
                   <div class="flex gap-2 justify-end">
                     <button
+                      @click="openEditAccountDialog(account)"
                       class="p-1.5 rounded-md hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors"
-                      title="Edit"
+                      title="Edit Account Name"
                     >
                       <Pencil class="w-4 h-4" />
                     </button>
@@ -605,6 +636,43 @@ onMounted(async () => {
             </button>
             <button
               @click="handleSaveShopName"
+              class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Edit Account Dialog (Account Management tab) -->
+    <Teleport to="body">
+      <div v-if="editingAccount" class="fixed inset-0 z-50 flex items-center justify-center" @click.self="closeEditAccountDialog">
+        <!-- Backdrop -->
+        <div class="fixed inset-0 bg-black/50"></div>
+        
+        <!-- Dialog -->
+        <div class="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4 p-6 z-10">
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">Edit Account</h2>
+          <p class="text-sm text-gray-600 dark:text-gray-400 mb-4">Enter the new name for this account:</p>
+          
+          <input
+            v-model="editingAccountName"
+            type="text"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-md text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="Account name"
+            @keyup.enter="handleSaveAccountName"
+          />
+          
+          <div class="flex justify-end gap-3 mt-6">
+            <button
+              @click="closeEditAccountDialog"
+              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-md transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              @click="handleSaveAccountName"
               class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
             >
               Save
