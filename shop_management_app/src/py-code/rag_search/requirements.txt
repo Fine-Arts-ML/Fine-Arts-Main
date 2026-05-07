@@ -1,0 +1,11 @@
+fastapi>=0.115.0
+uvicorn>=0.30.0
+sentence-transformers>=3.0.0
+scikit-learn>=1.6.0
+torch>=2.5.0
+sqlalchemy>=2.0.45
+pg8000>=1.31.5
+python-dotenv>=1.2.1
+pandas>=2.3.0
+scipy>=1.14.0
+numpy>=2.2.0

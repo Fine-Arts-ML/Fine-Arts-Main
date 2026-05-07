@@ -1,0 +1,76 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - NC_ACC=${NC_ACC}
+      - NC_PASS=${NC_PASS}
+      - NC_HOST=${NC_HOST}
+      - RAG_SERVICE_URL=http://rag-search:8079
+      - HASH_SERVICE_URL=http://hash-calc:8078
+    depends_on:
+      rag-search:
+        condition: service_started
+      hash-calc:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  rag-search:
+    build:
+      context: ./src/py-code/rag_search
+      dockerfile: Dockerfile
+    ports:
+      - "8079:8079"
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DEFAULT_MODEL=${DEFAULT_MODEL:-qwen3-0.6b}
+      - MODELS_DIR=/app/rag_search/Models
+      - INDEX_DIR=/app/rag_search/tfidf-index
+      - MAX_CACHED_MODELS=1
+      - HOST=0.0.0.0
+      - PORT=8079
+    volumes:
+      - ./src/rag-models:/app/rag_search/Models
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8079/api/v1/rag/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  hash-calc:
+    build:
+      context: ./src/py-code/hash_calc
+      dockerfile: Dockerfile
+    ports:
+      - "8078:8078"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8078
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8078/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

@@ -1,0 +1,84 @@
+"""Configuration for the RAG Search service."""
+
+import os
+from pathlib import Path
+from dataclasses import dataclass, field
+from typing import Dict, List
+
+# Resolve models directory relative to project root
+_RAG_SEARCH_DIR = Path(__file__).resolve().parent
+_PROJECT_ROOT = _RAG_SEARCH_DIR.parent.parent
+_DEFAULT_MODELS_DIR = str(_PROJECT_ROOT / "py-code" / "Models")
+_DEFAULT_INDEX_DIR = str(_PROJECT_ROOT / "tfidf-index")
+
+# Override with environment variables if set (for Docker compatibility)
+if os.getenv("MODELS_DIR"):
+    _DEFAULT_MODELS_DIR = os.getenv("MODELS_DIR")
+if os.getenv("INDEX_DIR"):
+    _DEFAULT_INDEX_DIR = os.getenv("INDEX_DIR")
+
+
+@dataclass
+class ModelConfig:
+    """Configuration for a single embedding model."""
+    id: str
+    name: str
+    description: str
+    model_path: str  # Path inside container to model files
+    params: str = ""
+    disk_size: str = ""
+    ram_usage: str = ""
+    load_time: str = ""
+
+
+@dataclass
+class RAGConfig:
+    """Main configuration for the RAG Search service."""
+    
+    # Database configuration
+    db_host: str = os.getenv("DB_HOST", "localhost")
+    db_port: int = int(os.getenv("DB_PORT", "5432"))
+    db_name: str = os.getenv("DB_NAME", "shop_management")
+    db_user: str = os.getenv("DB_USER", "postgres")
+    db_password: str = os.getenv("DB_PASSWORD", "postgres")
+    
+    # Model configuration
+    models_dir: str = os.getenv("MODELS_DIR", _DEFAULT_MODELS_DIR)
+    default_model: str = os.getenv("DEFAULT_MODEL", "qwen3-0.6b")
+    max_cached_models: int = int(os.getenv("MAX_CACHED_MODELS", "1"))
+    
+    # Available models
+    available_models: Dict[str, ModelConfig] = field(default_factory=lambda: {
+        "qwen3-0.6b": ModelConfig(
+            id="qwen3-0.6b",
+            name="Qwen3-0.6B",
+            description="Best accuracy, recommended for production",
+            model_path="qwen3-0.6b",
+            params="600M",
+            disk_size="~1.2GB",
+            ram_usage="~1.5GB",
+            load_time="~10 seconds"
+        ),
+
+    })
+    
+    # Search configuration
+    default_top_k: int = 24
+    default_preview_size: int = 540
+    
+    # Server configuration
+    host: str = os.getenv("HOST", "0.0.0.0")
+    port: int = int(os.getenv("PORT", "8079"))
+    
+    # TF-IDF index path
+    index_dir: str = os.getenv("INDEX_DIR", _DEFAULT_INDEX_DIR)
+    
+    def get_connection_string(self) -> str:
+        """Get SQLAlchemy connection string."""
+        return f"postgresql+pg8000://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}"
+    
+    def get_model_path(self, model_id: str) -> str:
+        """Get full path to a model directory."""
+        model_config = self.available_models.get(model_id, {})
+        model_path = getattr(model_config, 'model_path', model_id) if hasattr(model_config, 'model_path') else model_id
+        return os.path.join(self.models_dir, model_path)

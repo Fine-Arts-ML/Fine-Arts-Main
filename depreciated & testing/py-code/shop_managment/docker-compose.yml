@@ -1,0 +1,36 @@
+services:
+  shop-management:
+    image: shop-management:latest  # Pre-built image - no build section needed
+    container_name: shop-management
+    environment:
+      - PUID=1000 # Update with your user ID
+      - PGID=1000 # Update with your group ID
+      - DB_HOST=${DB_HOST} # PostgreSQL hostname
+      - DB_NAME=${DB_NAME} # Database name for Nextcloud
+      - DB_USER=${DB_USER} # Database user for Nextcloud
+      - DB_PASSWORD=${DB_PASSWORD} # Database password for Nextcloud
+      - NC_ACC=${NC_ACC}
+      - NC_PASS=${NC_PASS}
+      - URL=${EXTERNAL_URL}
+      - APP_VERSION=1.0.1
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    ports:
+      - 5435:5432
+      - 8508:8501
+    networks:
+      - management_search
+
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    container_name: shops_cloudflared
+    restart: unless-stopped
+    command: tunnel run --token ${CLOUDFLARE_TOKEN}
+    networks:
+      - management_search
+
+
+networks:
+  management_search:
+    driver: bridge
