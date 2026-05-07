@@ -1,7 +1,7 @@
 /**
  * Reverse image search using perceptual hashing.
  *
- * Accepts an uploaded image, calculates hashes via Python subprocess,
+ * Accepts an uploaded image, calculates hashes via the hash-calc microservice,
  * and returns the closest matches from the database.
  *
  * Request Body: multipart/form-data
@@ -12,15 +12,11 @@
  */
 
 import { transformPreviewUrls } from '~/server/utils/preview'
-import { spawn } from 'child_process'
-import { Buffer } from 'buffer'
-import path from 'path'
 
 interface HashResult {
   whash: string
   ahash: string
   phash: string
-  error?: string
 }
 
 /**
@@ -53,73 +49,27 @@ function hexHammingDistance(hex1: string, hex2: string): number {
   return popcount(xorHigh) + popcount(xorLow)
 }
 
-function calculateHashes(imageBuffer: Buffer): Promise<HashResult> {
-  return new Promise((resolve, reject) => {
-    // Use the venv Python to ensure imagehash library is available
-    const baseDir = process.cwd().replace('/src/server/api/files', '')
-    const venvPython = path.join(baseDir, '.venv', 'bin', 'python')
-    const pythonScript = path.join(baseDir, 'src', 'py-code', 'hash_helper.py')
-    
-    console.log('[reverse-search] Base dir:', baseDir)
-    console.log('[reverse-search] Python path:', venvPython)
-    console.log('[reverse-search] Script path:', pythonScript)
-    
-    const python = spawn(venvPython, [pythonScript])
-
-    let stdout = ''
-    let stderr = ''
-
-    python.stdout.on('data', (data: Buffer) => {
-      stdout += data.toString()
-      console.log('[reverse-search] Python stdout:', data.toString().substring(0, 100))
-    })
-
-    python.stderr.on('data', (data: Buffer) => {
-      stderr += data.toString()
-      console.log('[reverse-search] Python stderr:', data.toString())
-    })
-
-    python.on('close', (code) => {
-      console.log('[reverse-search] Python process closed with code:', code)
-      console.log('[reverse-search] Full stdout:', stdout)
-      console.log('[reverse-search] Full stderr:', stderr)
-      
-      if (code !== 0 && code !== null) {
-        reject(new Error(`Python process exited with code ${code}: ${stderr}`))
-        return
-      }
-
-      try {
-        const b64Json = stdout.trim()
-        if (!b64Json) {
-          reject(new Error('Python script produced no output'))
-          return
-        }
-        const jsonStr = Buffer.from(b64Json, 'base64').toString('utf-8')
-        console.log('[reverse-search] Parsed JSON:', jsonStr)
-        const result: HashResult = JSON.parse(jsonStr)
-        
-        if (result.error) {
-          reject(new Error(result.error))
-        } else {
-          resolve(result)
-        }
-      } catch (e) {
-        reject(new Error(`Failed to parse hash result: ${e}`))
-      }
-    })
-
-    python.on('error', (err) => {
-      console.log('[reverse-search] Python process error:', err.message)
-      reject(new Error(`Failed to start Python process: ${err.message}`))
-    })
-
-    const b64Data = imageBuffer.toString('base64')
-    console.log('[reverse-search] Image size:', imageBuffer.length, 'bytes')
-    console.log('[reverse-search] Base64 length:', b64Data.length)
-    python.stdin.write(b64Data)
-    python.stdin.end()
+/**
+ * Calculate hashes by calling the hash-calc microservice.
+ */
+async function calculateHashes(imageBuffer: Buffer, hashMethod: string): Promise<HashResult> {
+  const hashServiceUrl = process.env.HASH_SERVICE_URL || 'http://localhost:8078'
+  
+  console.log('[reverse-search] Hash service URL:', hashServiceUrl)
+  console.log('[reverse-search] Image size:', imageBuffer.length, 'bytes')
+  
+  const b64Data = imageBuffer.toString('base64')
+  
+  const response = await $fetch(`${hashServiceUrl}/api/v1/hash/calculate`, {
+    method: 'POST',
+    body: {
+      image: b64Data,
+      hashMethod
+    }
   })
+  
+  console.log('[reverse-search] Hash calculation response:', JSON.stringify(response))
+  return response as HashResult
 }
 
 export default defineEventHandler(async (event: any) => {
@@ -146,28 +96,21 @@ export default defineEventHandler(async (event: any) => {
     throw createError({ statusCode: 400, statusMessage: 'Invalid image data' })
   }
 
-  // Calculate hashes using Python
+  // Calculate hashes via hash-calc microservice
   let hashes: HashResult
   try {
-    hashes = await calculateHashes(imageField.data)
+    hashes = await calculateHashes(imageField.data, hashMethod)
   } catch (error: any) {
+    console.error('[reverse-search] Hash calculation failed:', error.message)
     throw createError({
       statusCode: 500,
       statusMessage: 'Failed to calculate hashes',
-      data: error.message,
+      data: error.message || 'Hash service unavailable',
     })
   }
 
-  if (hashes.error) {
-    throw createError({
-      statusCode: 500,
-      statusMessage: 'Hash calculation failed',
-      data: hashes.error,
-    })
-  }
-
-  const pg = await import('node_modules/@types/pg')
-  const pool = new pg.Pool({
+  const pgModule = await import('pg')
+  const pool = new pgModule.Pool({
     host: process.env.DB_HOST || 'localhost',
     port: Number(process.env.DB_PORT) || 5432,
     database: process.env.DB_NAME || 'shop_management',

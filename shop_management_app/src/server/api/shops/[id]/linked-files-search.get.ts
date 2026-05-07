@@ -104,7 +104,7 @@ export default defineEventHandler(async (event) => {
     console.log('[linked-files-search] Raw query:', rawQuery)
     console.log('[linked-files-search] Params:', params)
 
-    const pg = await import('node_modules/@types/pg')
+    const pg = await import('pg')
     const pool = new pg.Pool({
       host: process.env.DB_HOST || 'localhost',
       port: Number(process.env.DB_PORT) || 5432,

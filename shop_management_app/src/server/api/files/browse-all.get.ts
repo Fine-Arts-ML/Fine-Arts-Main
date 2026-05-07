@@ -47,8 +47,8 @@ export default defineEventHandler(async (event) => {
       orderByClause = `ORDER BY ai.fileid ${sortOrder}`
     }
 
-    const pg = await import('node_modules/@types/pg')
-    const pool = new pg.Pool({
+    const pgModule = await import('pg')
+    const pool = new pgModule.Pool({
       host: process.env.DB_HOST || 'localhost',
       port: Number(process.env.DB_PORT) || 5432,
       database: process.env.DB_NAME || 'shop_management',

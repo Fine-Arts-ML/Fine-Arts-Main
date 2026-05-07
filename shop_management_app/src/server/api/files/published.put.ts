@@ -1,4 +1,4 @@
-import { Pool } from 'node_modules/@types/pg'
+import { Pool } from 'pg'
 
 let pool: Pool | null = null
 

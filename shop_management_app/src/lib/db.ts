@@ -1,6 +1,6 @@
 // Database connection utility using PostgreSQL with Drizzle ORM
 import { drizzle } from 'drizzle-orm/node-postgres'
-import { Pool } from 'node_modules/@types/pg'
+import { Pool } from 'pg'
 import * as schema from './schema'
 
 let pool: Pool | null = null

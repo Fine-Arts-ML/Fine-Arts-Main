@@ -45,7 +45,7 @@ export default defineEventHandler(async (event) => {
 
     const whereClause = whereClauses.join(' AND ')
 
-    const pg = await import('node_modules/@types/pg')
+    const pg = await import('pg')
     const pool = new pg.Pool({
       host: process.env.DB_HOST || 'localhost',
       port: Number(process.env.DB_PORT) || 5432,

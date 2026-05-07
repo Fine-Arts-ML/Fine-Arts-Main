@@ -13,7 +13,7 @@ A modern, full-featured web application for managing fine art files, shops, and 
   - **Semantic Search (RAG)**: AI-powered similarity search using Qwen3 embedding models with relevance percentages
   - **Name Search**: Fast filename-based text search
   - **Browse All**: Grid-based file browser with thumbnail previews
-  - **Reverse Search**: Image-based similarity search (in development)
+  - **Reverse Search**: Image-based similarity search using visual fingerprinting to find similar artwork
 
 - **Shop & Account Management**
   - Create and manage multiple shops (Society6, Artheroes, PhotoWall, etc.)
@@ -47,6 +47,11 @@ Quickly find files by searching their filenames.
 AI-powered search that finds visually similar artwork with relevance scores.
 
 <img src='images/Shop_app_files_semantic_search.png' width=80%>
+
+#### Files - Reverse Search
+Image-based similarity search that finds visually similar artwork using fingerprinting technology.
+
+<img src='images/Shop_app_files_reverse_search.png' width=80%>
 
 #### Shops & Accounts - Shop Management
 Manage your online shops and link accounts to files.
