@@ -35,30 +35,37 @@ A modern, full-featured web application for managing fine art files, shops, and 
 
 #### Files - Browse All
 Browse your entire art collection in a responsive grid layout with thumbnail previews.
+
 <img src='images/Shop_app_files_browse_all.png' width=80%>
 
 #### Files - Name Search
 Quickly find files by searching their filenames.
+
 <img src='images/Shop_app_files_filename_search.png' width=80%>
 
 #### Files - Semantic Search (RAG)
 AI-powered search that finds visually similar artwork with relevance scores.
+
 <img src='images/Shop_app_files_semantic_search.png' width=80%>
 
 #### Shops & Accounts - Shop Management
 Manage your online shops and link accounts to files.
+
 <img src='images/Shop_app_shops_acc_shops.png' width=80%>
 
 #### Shops & Accounts - Account Management
 Create and manage shop accounts across all your platforms.
+
 <img src='images/Shop_app_shops_acc_accounts.png' width=80%>
 
 #### Linked Files - Shop View
 View and manage all files linked to a specific shop.
+
 <img src='images/Shop_app_linked_files_detailed_shop_view.png' width=80%>
 
 #### Settings - RAG Configuration
 Configure semantic search models, caching, and index rebuild options.
+
 <img src='images/Shop_app_settings_view.png' width=80%>
 
 ### Tech Stack
