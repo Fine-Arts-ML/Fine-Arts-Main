@@ -1,11 +1,18 @@
 # Deployment-ready docker-compose file for pre-built images
 # Use this file after loading exported images on the target server
-# Usage: docker compose -f docker-compose.deploy.yml up -d
-# This uses a Cloudlfare Tunnel to expose the app
+#
+# Usage:
+#   1. Copy images to server using import-images.sh
+#   2. Configure .env file with your settings
+#   3. Run: docker compose -f docker-compose.deploy.yml up -d
+#
+# Optional: Remove the 'tunnel' service block if you don't use Cloudflare
+# =============================================================================
+
 services:
   app:
-    image: shop_management-app:latest
-    container_name: shop_management-app
+    image: shop-management-app:latest
+    container_name: shop-management-app
     ports:
       - "3000:3000"
     environment:
@@ -36,8 +43,8 @@ services:
       start_period: 30s
 
   rag-search:
-    image: shop_management-rag-search:latest
-    container_name: shop_management-rag-search
+    image: shop-management-rag-search:latest
+    container_name: shop-management-rag-search
     ports:
       - "8079:8079"
     environment:
@@ -53,8 +60,8 @@ services:
       - HOST=0.0.0.0
       - PORT=8079
     volumes:
-      - ./rag-models:/app/rag_search/Models
-      - ./tfidf-index:/app/rag_search/tfidf-index
+      - rag-models:/app/rag_search/Models
+      - tfidf-index:/app/rag_search/tfidf-index
     restart: unless-stopped
     networks:
       - shop-network
@@ -66,8 +73,8 @@ services:
       start_period: 60s
 
   hash-calc:
-    image: shop_management-hash-calc:latest
-    container_name: shop_management-hash-calc
+    image: shop-management-hash-calc:latest
+    container_name: shop-management-hash-calc
     ports:
       - "8078:8078"
     environment:
@@ -83,14 +90,22 @@ services:
       retries: 3
       start_period: 10s
 
+  # Optional: Cloudflare Tunnel for secure remote access
+  # Remove this service if you don't use Cloudflare
+  # You'll need to set CLOUDFLARE_TOKEN in your .env file
   tunnel:
     image: cloudflare/cloudflared:latest
-    container_name: shops_cloudflared
+    container_name: shop-management-cloudflared
     restart: unless-stopped
     command: tunnel run --token ${CLOUDFLARE_TOKEN}
     networks:
       - shop-network
 
+volumes:
+  rag-models:
+    driver: local
+  tfidf-index:
+    driver: local
 
 networks:
   shop-network:

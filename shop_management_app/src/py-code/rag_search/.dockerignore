@@ -1,0 +1,44 @@
+# RAG Search Service - Docker ignore file
+
+# Version control
+.git
+.gitignore
+
+# Documentation
+*.md
+LICENSE
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.venv
+venv
+*.egg
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Models directory (will be mounted as volume)
+Models
+tfidf-index
+
+# Other
+.env
+.env.*

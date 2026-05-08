@@ -1,66 +1,55 @@
+# Shop Management App - Docker ignore file
+
+# Version control
+.git
+.gitignore
+
+# Documentation
+*.md
+LICENSE
+!README.md
+
 # Development
 node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 .nuxt
+.dist
 .output
-.env.local
-*.log
-.env*
-
-# Python
-__pycache__
-*.pyc
-*.pyo
-.venv
-.eggs
-*.egg-info
-dist
-build
-.pytest_cache
-.mypy_cache
 
 # IDE
 .vscode
 .idea
 *.swp
 *.swo
-*.bak
+*~
 
-# Git
-.git
-.gitignore
+# Environment
+.env
+.env.*
+!.env.example
 
-# Docs
-*.md
-plans/
-TROUBLESHOOTING.md
-
-# Docker
+# Docker (avoid recursive docker builds)
 docker-compose*.yml
 Dockerfile*
 .dockerignore
 
-# Test
-coverage
-.nyc_output
-.nyc_output/
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.venv
+venv
 
 # OS
 .DS_Store
 Thumbs.db
-*.lnk
 
-# Nuxt
-.nuxt
-.output
+# Logs
+*.log
 
-# Type checking
-tsbuildinfo
-
-# TFIDF index (large binary index files)
-tfidf-index
-*.bin
-Models/
-
-# Memory dump files
-core
-*.core
+# Temporary files
+*.tmp
+*.temp

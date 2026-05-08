@@ -6,14 +6,20 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory to parent of rag_search package
+# Set working directory
 WORKDIR /app
 
 # Copy requirements first for better layer caching
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy RAG service code into package directory
+# Install PyTorch CPU-only first (much smaller than full version with CUDA)
+# Then install other requirements
+RUN pip install --no-cache-dir \
+    --index-url https://download.pytorch.org/whl/cpu \
+    torch>=2.5.0 torchvision>=0.20.0 && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Copy RAG service code
 COPY . /app/rag_search
 
 # Create directories for models and index
