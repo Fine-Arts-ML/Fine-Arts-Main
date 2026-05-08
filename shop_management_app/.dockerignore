@@ -4,6 +4,7 @@ node_modules
 .output
 .env.local
 *.log
+.env*
 
 # Python
 __pycache__
