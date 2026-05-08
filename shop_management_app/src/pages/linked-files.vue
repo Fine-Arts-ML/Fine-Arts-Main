@@ -45,9 +45,9 @@ const {
   setupResizeObserver,
 } = useLinkedFiles()
 
-// Edit display name modal state
-const showEditDisplayNameModal = ref(false)
-const editingFileId = ref<number | null>(null)
+// Edit display name sidebar state
+const showEditDisplayNameSidebar = ref(false)
+const editingFile = ref<LinkedFileResult | null>(null)
 const editingDisplayNames = ref<string[]>([])
 const newDisplayNameInput = ref('')
 
@@ -98,16 +98,16 @@ function handleResize(element: HTMLElement) {
 }
 
 // Edit display name helpers
-function openEditDisplayNameModal(file: LinkedFileResult) {
-  editingFileId.value = file.fileId
+function openEditDisplayNameSidebar(file: LinkedFileResult) {
+  editingFile.value = file
   editingDisplayNames.value = [...(file.allDisplayNames ?? [])]
   newDisplayNameInput.value = ''
-  showEditDisplayNameModal.value = true
+  showEditDisplayNameSidebar.value = true
 }
 
-function closeEditDisplayNameModal() {
-  showEditDisplayNameModal.value = false
-  editingFileId.value = null
+function closeEditDisplayNameSidebar() {
+  showEditDisplayNameSidebar.value = false
+  editingFile.value = null
   editingDisplayNames.value = []
   newDisplayNameInput.value = ''
 }
@@ -135,12 +135,12 @@ function handleDisplayNameKeydown(event: KeyboardEvent) {
 }
 
 async function saveDisplayNames() {
-  if (editingFileId.value === null) return
-  const success = await updateDisplayNames(editingFileId.value, editingDisplayNames.value)
+  if (editingFile.value === null) return
+  const success = await updateDisplayNames(editingFile.value.fileId, editingDisplayNames.value)
   if (!success) {
     alert('Failed to update display names')
   }
-  closeEditDisplayNameModal()
+  closeEditDisplayNameSidebar()
 }
 
 onMounted(() => {
@@ -390,20 +390,19 @@ onUnmounted(() => {
               </td>
               <!-- Actions -->
               <td class="px-4 py-3 text-right">
-                <div class="flex items-center justify-end gap-2">
+                <div class="flex flex-col items-end gap-2">
                   <button
-                    @click="openEditDisplayNameModal(file)"
-                    class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-                    title="Edit Display Names"
+                    @click="openEditDisplayNameSidebar(file)"
+                    class="inline-flex items-center gap-1.5 text-sm text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 transition-colors whitespace-nowrap"
                   >
-                    <Edit3 class="w-3.5 h-3.5" />
-                    Edit
+                    <Edit3 class="w-4 h-4" />
+                    Edit Display Names
                   </button>
                   <button
                     @click="handleUnlink(file, Number(file.accountId))"
-                    class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                    class="inline-flex items-center gap-1.5 text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 transition-colors whitespace-nowrap"
                   >
-                    <Trash2 class="w-3.5 h-3.5" />
+                    <Trash2 class="w-4 h-4" />
                     Unlink
                   </button>
                 </div>
@@ -448,93 +447,89 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Edit Display Name Modal -->
+    <!-- Edit Display Name Sidebar -->
     <Teleport to="body">
-      <Transition enter-active-class="transition duration-200 ease-out" enter-from-class="translate-y-2 opacity-0" enter-to-class="translate-y-0 opacity-100" leave-active-class="transition duration-150 ease-in" leave-from-class="translate-y-0 opacity-100" leave-to-class="translate-y-2 opacity-0">
-        <div v-if="showEditDisplayNameModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <Transition name="sidebar">
+        <div v-if="showEditDisplayNameSidebar" class="fixed inset-0 z-50 flex justify-end" @click.self="closeEditDisplayNameSidebar">
           <!-- Backdrop -->
-          <div class="fixed inset-0 bg-black/50" @click="closeEditDisplayNameModal"></div>
+          <div class="absolute inset-0 bg-black/30" @click="closeEditDisplayNameSidebar"></div>
           
-          <!-- Modal -->
-          <div class="relative bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 w-full max-w-md z-10">
-            <!-- Modal Header -->
-            <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Edit Display Names</h3>
-              <button
-                @click="closeEditDisplayNameModal"
-                class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-              >
-                <X class="w-5 h-5" />
-              </button>
+          <!-- Sidebar Panel -->
+          <div class="relative w-full max-w-md bg-white dark:bg-gray-900 shadow-xl border-l border-gray-200 dark:border-gray-700 flex flex-col">
+            <!-- Header -->
+            <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+              <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Edit Display Names</h2>
+                <button
+                  @click="closeEditDisplayNameSidebar"
+                  class="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 transition-colors"
+                >
+                  <X class="w-5 h-5" />
+                </button>
+              </div>
+              <!-- Selected File Preview -->
+              <div v-if="editingFile" class="flex items-center gap-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
+                <img
+                  :src="editingFile.fileId ? getPreviewUrl(editingFile, 64) : ''"
+                  :alt="editingFile.filename"
+                  class="w-16 h-16 rounded object-cover"
+                  @error="(e) => { (e.target as HTMLImageElement).style.display = 'none' }"
+                />
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{{ editingFile.filename }}</p>
+                  <p v-if="editingDisplayNames.length > 0" class="text-xs text-gray-500 dark:text-gray-400 truncate">
+                    {{ editingDisplayNames.join(', ') }}
+                  </p>
+                  <p v-else class="text-xs text-gray-400 dark:text-gray-500">No display names assigned</p>
+                </div>
+              </div>
             </div>
-            
-            <!-- Modal Body -->
-            <div class="p-4">
-              <!-- Current Display Names -->
+
+            <!-- Form Content -->
+            <div class="flex-1 p-6 overflow-y-auto">
+              <!-- Display Names (Tag-style Input) -->
               <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Display Names
-                </label>
-                <div v-if="editingDisplayNames.length === 0" class="text-sm text-gray-400 dark:text-gray-500 py-2">
-                  No display names assigned
-                </div>
-                <div v-else class="flex flex-wrap gap-2 mb-2">
-                  <span
-                    v-for="(name, index) in editingDisplayNames"
-                    :key="index"
-                    class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-sm bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400"
-                  >
-                    {{ name }}
-                    <button
-                      @click="removeDisplayName(index)"
-                      class="hover:text-blue-600 dark:hover:text-blue-300 transition-colors"
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Display Names</label>
+                <div class="border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent">
+                  <!-- Tags -->
+                  <div class="flex flex-wrap items-center gap-1.5 p-2">
+                    <span
+                      v-for="(name, index) in editingDisplayNames"
+                      :key="index"
+                      class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-sm font-medium"
                     >
-                      <X class="w-3 h-3" />
-                    </button>
-                  </span>
+                      <span class="truncate max-w-[150px]">{{ name }}</span>
+                      <button
+                        @click="removeDisplayName(index)"
+                        class="flex items-center justify-center rounded-full hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+                      >
+                        <X class="w-3 h-3" />
+                      </button>
+                    </span>
+                    <!-- Input for new tags -->
+                    <input
+                      v-model="newDisplayNameInput"
+                      @keydown="handleDisplayNameKeydown"
+                      type="text"
+                      placeholder="Type and press Enter to add..."
+                      class="flex-1 min-w-[120px] bg-transparent border-none outline-none text-gray-900 dark:text-gray-100 text-sm placeholder-gray-400"
+                    />
+                  </div>
                 </div>
-              </div>
-              
-              <!-- Add New Display Name -->
-              <div>
-                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Add New Display Name
-                </label>
-                <div class="flex gap-2">
-                  <input
-                    v-model="newDisplayNameInput"
-                    @keydown="handleDisplayNameKeydown"
-                    type="text"
-                    placeholder="Type and press Enter to add..."
-                    class="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 text-sm"
-                  />
-                  <button
-                    @click="addDisplayName"
-                    class="px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-                  >
-                    <Plus class="w-4 h-4" />
-                  </button>
-                </div>
-                <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                  Press Enter or comma to add, Backspace to remove last
-                </p>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Press Enter or comma to add, Backspace to remove last</p>
               </div>
             </div>
-            
-            <!-- Modal Footer -->
-            <div class="flex items-center justify-end gap-3 p-4 border-t border-gray-200 dark:border-gray-700">
+
+            <!-- Footer -->
+            <div class="p-6 border-t border-gray-200 dark:border-gray-700 flex gap-3">
               <button
-                @click="closeEditDisplayNameModal"
-                class="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              >
-                Cancel
-              </button>
+                @click="closeEditDisplayNameSidebar"
+                class="flex-1 px-4 py-2.5 rounded-lg border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              >Cancel</button>
               <button
                 @click="saveDisplayNames"
-                class="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-              >
-                Save Changes
-              </button>
+                class="flex-1 px-4 py-2.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >Save Changes</button>
             </div>
           </div>
         </div>
@@ -546,5 +541,26 @@ onUnmounted(() => {
 <style scoped>
 table {
   table-layout: auto;
+}
+
+/* Sidebar transition */
+.sidebar-enter-active,
+.sidebar-leave-active {
+  transition: opacity 0.2s ease;
+}
+
+.sidebar-enter-active div.relative,
+.sidebar-leave-active div.relative {
+  transition: transform 0.2s ease;
+}
+
+.sidebar-enter-from,
+.sidebar-leave-to {
+  opacity: 0;
+}
+
+.sidebar-enter-from div.relative,
+.sidebar-leave-to div.relative {
+  transform: translateX(100%);
 }
 </style>
