@@ -292,6 +292,7 @@ export const useLinkedFiles = () => {
       const fileIndex = linkedFiles.value.findIndex(f => Number(f.fileId) === fileId)
       if (fileIndex !== -1) {
         const file = linkedFiles.value[fileIndex]
+        if (!file) return false
         linkedFiles.value[fileIndex] = {
           fileId: file.fileId,
           filename: file.filename,

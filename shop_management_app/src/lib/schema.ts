@@ -17,8 +17,8 @@ export const accounts = pgTable('bre_shop_account', {
 
 // Shop-Account relationship table
 export const shopAccountMatrix = pgTable('bre_shop_account_matrix', {
-  shopId: bigint('shop_id', { mode: 'bigint' }).references(() => shops.shopId),
-  accountId: bigint('account_id', { mode: 'bigint' }).references(() => accounts.accountId),
+  shopId: bigint('shop_id', { mode: 'number' }).references(() => shops.shopId),
+  accountId: bigint('account_id', { mode: 'number' }).references(() => accounts.accountId),
 })
 
 // Account-File index table
