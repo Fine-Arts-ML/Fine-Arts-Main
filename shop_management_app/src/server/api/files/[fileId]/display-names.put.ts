@@ -62,6 +62,31 @@ export default defineEventHandler(async (event) => {
       )
     }
 
+    // Clean up orphaned display names: if a display name is no longer linked to any file in this shop, delete it
+    if (toRemove.length > 0) {
+      const displayNameIdsToRemove = toRemove.map((row: any) => row.display_name_id)
+      // Check which display names are still referenced by other files in this shop
+      const orphanResult = await pool.query(
+        `SELECT dn.display_name_id, dn.display_name
+         FROM bre_display_names dn
+         WHERE dn.display_name_id = ANY($1::bigint[])
+           AND NOT EXISTS (
+             SELECT 1 FROM bre_display_name_index dni2
+             WHERE dni2.display_name_id = dn.display_name_id
+               AND dni2.shop_id = $2
+           )`,
+        [displayNameIdsToRemove, shopId]
+      )
+      // Delete orphaned display names
+      if (orphanResult.rows.length > 0) {
+        const orphanIds = orphanResult.rows.map((row: any) => row.display_name_id)
+        await pool.query(
+          'DELETE FROM bre_display_names WHERE display_name_id = ANY($1::bigint[])',
+          [orphanIds]
+        )
+      }
+    }
+
     // Add new display names
     for (const displayName of toAdd) {
       // Check if display name already exists
