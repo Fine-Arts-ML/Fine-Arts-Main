@@ -3,6 +3,7 @@ export interface LinkedFileResult {
   filename: string
   previewUrl: string | null
   displayName: string | null
+  allDisplayNames: string[] // All display names linked to this file in the shop
   published: boolean
   accountId: number | bigint
   accountName: string

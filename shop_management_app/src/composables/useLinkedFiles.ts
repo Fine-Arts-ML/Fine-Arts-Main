@@ -120,6 +120,7 @@ export const useLinkedFiles = () => {
         filename: file.filename,
         previewUrl: file.previewUrl,
         displayName: file.displayName,
+        allDisplayNames: file.allDisplayNames ?? [],
         published: file.published ?? false,
         accountId: file.accountIds?.[0] ?? 0,
         accountName: file.accountNames?.[0] ?? '',
@@ -296,6 +297,7 @@ export const useLinkedFiles = () => {
           filename: file.filename,
           previewUrl: file.previewUrl,
           displayName: file.displayName,
+          allDisplayNames: file.allDisplayNames ?? [],
           published: newPublished,
           accountId: file.accountId,
           accountName: file.accountName,
@@ -306,6 +308,30 @@ export const useLinkedFiles = () => {
       return true
     } catch (e: any) {
       console.error('[useLinkedFiles] Failed to toggle published:', e)
+      return false
+    }
+  }
+
+  // Update display names for a file
+  async function updateDisplayNames(fileId: number, newDisplayNames: string[]) {
+    if (!selectedShop.value) return false
+
+    try {
+      await $fetch(`/api/files/${fileId}/display-names`, {
+        method: 'PUT',
+        body: {
+          fileId,
+          shopId: selectedShop.value.shop_id,
+          newDisplayNames,
+        },
+      })
+
+      // Refresh files to get updated display names
+      await fetchFiles(false)
+
+      return true
+    } catch (e: any) {
+      console.error('[useLinkedFiles] Failed to update display names:', e)
       return false
     }
   }
@@ -337,6 +363,7 @@ export const useLinkedFiles = () => {
     performSearch,
     setPublishedFilter,
     togglePublished,
+    updateDisplayNames,
     loadMore,
     unlinkFile,
     clearSelection,

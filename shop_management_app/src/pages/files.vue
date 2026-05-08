@@ -67,6 +67,35 @@ const published = ref(false)
 const linkSuccess = ref(false)
 const linkError = ref<string | null>(null)
 
+// Display names (tag-style input)
+const displayNameInput = ref('')
+const displayNames = ref<string[]>([])
+const isAddingDisplayName = ref(false)
+
+function addDisplayName() {
+  const name = displayNameInput.value.trim()
+  console.log('[files.vue] addDisplayName called, name:', name, 'current displayNames:', displayNames.value)
+  if (name && !displayNames.value.includes(name)) {
+    displayNames.value.push(name)
+    displayNameInput.value = ''
+    console.log('[files.vue] After push, displayNames:', displayNames.value)
+  }
+}
+
+function removeDisplayName(index: number) {
+  displayNames.value.splice(index, 1)
+}
+
+function handleDisplayNameKeydown(event: KeyboardEvent) {
+  if (event.key === 'Enter' || event.key === ',') {
+    event.preventDefault()
+    addDisplayName()
+  }
+  if (event.key === 'Backspace' && displayNameInput.value === '' && displayNames.value.length > 0) {
+    displayNames.value.pop()
+  }
+}
+
 // Browse All state
 const browseOffset = ref(0)
 const browseLoading = ref(false)
@@ -198,6 +227,9 @@ function closeLinkMenu() {
   showLinkMenu.value = false
   selectedFile.value = null
   published.value = false
+  displayNames.value = []
+  displayNameInput.value = ''
+  isAddingDisplayName.value = false
 }
 
 function onShopChange(shopId: number) {
@@ -218,7 +250,13 @@ async function handleLinkSubmit() {
     const fileId = getFileId(selectedFile.value)
     await $fetch('/api/files/link-to-shop-account', {
       method: 'POST',
-      body: { fileId, shopId: selectedShopId.value, accountId: selectedAccountId.value, published: published.value },
+      body: {
+        fileId,
+        shopId: selectedShopId.value,
+        accountId: selectedAccountId.value,
+        published: published.value,
+        displayNames: displayNames.value,
+      },
     })
     linkSuccess.value = true
     setTimeout(() => { closeLinkMenu(); linkSuccess.value = false }, 1500)
@@ -1167,6 +1205,38 @@ useHead({ title: 'Files - Art Management' })
                   <option :value="null" disabled>Select an account</option>
                   <option v-for="account in accounts" :key="account.account_id" :value="account.account_id">{{ account.account_name }}</option>
                 </select>
+              </div>
+
+              <!-- Display Names (Tag-style Input) -->
+              <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Display Names</label>
+                <div class="border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-transparent">
+                  <!-- Tags -->
+                  <div class="flex flex-wrap items-center gap-1.5 p-2">
+                    <span
+                      v-for="(name, index) in displayNames"
+                      :key="index"
+                      class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-sm font-medium"
+                    >
+                      <span class="truncate max-w-[150px]">{{ name }}</span>
+                      <button
+                        @click="removeDisplayName(index)"
+                        class="flex items-center justify-center rounded-full hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+                      >
+                        <X class="w-3 h-3" />
+                      </button>
+                    </span>
+                    <!-- Input for new tags -->
+                    <input
+                      v-model="displayNameInput"
+                      @keydown="handleDisplayNameKeydown"
+                      type="text"
+                      placeholder="Type and press Enter to add..."
+                      class="flex-1 min-w-[120px] bg-transparent border-none outline-none text-gray-900 dark:text-gray-100 text-sm placeholder-gray-400"
+                    />
+                  </div>
+                </div>
+                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">Press Enter or comma to add a display name</p>
               </div>
 
               <!-- Published Toggle -->

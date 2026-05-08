@@ -16,6 +16,8 @@ import {
   ChevronRight,
   ChevronLeft,
   Filter,
+  Edit3,
+  Plus,
 } from 'lucide-vue-next'
 
 // Use the linked files composable
@@ -37,10 +39,17 @@ const {
   performSearch,
   setPublishedFilter,
   togglePublished,
+  updateDisplayNames,
   loadMore,
   unlinkFile,
   setupResizeObserver,
 } = useLinkedFiles()
+
+// Edit display name modal state
+const showEditDisplayNameModal = ref(false)
+const editingFileId = ref<number | null>(null)
+const editingDisplayNames = ref<string[]>([])
+const newDisplayNameInput = ref('')
 
 // Shops state
 const shops = ref<Shop[]>([])
@@ -86,6 +95,52 @@ let contentElement: HTMLElement | null = null
 
 function handleResize(element: HTMLElement) {
   setupResizeObserver(element)
+}
+
+// Edit display name helpers
+function openEditDisplayNameModal(file: LinkedFileResult) {
+  editingFileId.value = file.fileId
+  editingDisplayNames.value = [...(file.allDisplayNames ?? [])]
+  newDisplayNameInput.value = ''
+  showEditDisplayNameModal.value = true
+}
+
+function closeEditDisplayNameModal() {
+  showEditDisplayNameModal.value = false
+  editingFileId.value = null
+  editingDisplayNames.value = []
+  newDisplayNameInput.value = ''
+}
+
+function addDisplayName() {
+  const name = newDisplayNameInput.value.trim()
+  if (name && !editingDisplayNames.value.includes(name)) {
+    editingDisplayNames.value.push(name)
+    newDisplayNameInput.value = ''
+  }
+}
+
+function removeDisplayName(index: number) {
+  editingDisplayNames.value.splice(index, 1)
+}
+
+function handleDisplayNameKeydown(event: KeyboardEvent) {
+  if (event.key === 'Enter' || event.key === ',') {
+    event.preventDefault()
+    addDisplayName()
+  }
+  if (event.key === 'Backspace' && newDisplayNameInput.value === '' && editingDisplayNames.value.length > 0) {
+    editingDisplayNames.value.pop()
+  }
+}
+
+async function saveDisplayNames() {
+  if (editingFileId.value === null) return
+  const success = await updateDisplayNames(editingFileId.value, editingDisplayNames.value)
+  if (!success) {
+    alert('Failed to update display names')
+  }
+  closeEditDisplayNameModal()
 }
 
 onMounted(() => {
@@ -290,9 +345,15 @@ onUnmounted(() => {
               </td>
               <!-- Display Name -->
               <td class="px-4 py-3">
-                <p v-if="file.displayName" class="text-sm text-gray-600 dark:text-gray-400 truncate max-w-[150px]" :title="file.displayName">
-                  {{ file.displayName }}
-                </p>
+                <div v-if="file.allDisplayNames && file.allDisplayNames.length > 0" class="flex flex-wrap gap-1">
+                  <span
+                    v-for="(name, idx) in file.allDisplayNames"
+                    :key="idx"
+                    class="inline-flex items-center px-2 py-0.5 rounded text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400"
+                  >
+                    {{ name }}
+                  </span>
+                </div>
                 <p v-else class="text-sm text-gray-400 dark:text-gray-500">-</p>
               </td>
               <!-- Account(s) -->
@@ -329,13 +390,23 @@ onUnmounted(() => {
               </td>
               <!-- Actions -->
               <td class="px-4 py-3 text-right">
-                <button
-                  @click="handleUnlink(file, Number(file.accountId))"
-                  class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-                >
-                  <Trash2 class="w-3.5 h-3.5" />
-                  Unlink
-                </button>
+                <div class="flex items-center justify-end gap-2">
+                  <button
+                    @click="openEditDisplayNameModal(file)"
+                    class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                    title="Edit Display Names"
+                  >
+                    <Edit3 class="w-3.5 h-3.5" />
+                    Edit
+                  </button>
+                  <button
+                    @click="handleUnlink(file, Number(file.accountId))"
+                    class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                  >
+                    <Trash2 class="w-3.5 h-3.5" />
+                    Unlink
+                  </button>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -376,6 +447,99 @@ onUnmounted(() => {
         </p>
       </div>
     </div>
+
+    <!-- Edit Display Name Modal -->
+    <Teleport to="body">
+      <Transition enter-active-class="transition duration-200 ease-out" enter-from-class="translate-y-2 opacity-0" enter-to-class="translate-y-0 opacity-100" leave-active-class="transition duration-150 ease-in" leave-from-class="translate-y-0 opacity-100" leave-to-class="translate-y-2 opacity-0">
+        <div v-if="showEditDisplayNameModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <!-- Backdrop -->
+          <div class="fixed inset-0 bg-black/50" @click="closeEditDisplayNameModal"></div>
+          
+          <!-- Modal -->
+          <div class="relative bg-white dark:bg-gray-900 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 w-full max-w-md z-10">
+            <!-- Modal Header -->
+            <div class="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">Edit Display Names</h3>
+              <button
+                @click="closeEditDisplayNameModal"
+                class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+              >
+                <X class="w-5 h-5" />
+              </button>
+            </div>
+            
+            <!-- Modal Body -->
+            <div class="p-4">
+              <!-- Current Display Names -->
+              <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Display Names
+                </label>
+                <div v-if="editingDisplayNames.length === 0" class="text-sm text-gray-400 dark:text-gray-500 py-2">
+                  No display names assigned
+                </div>
+                <div v-else class="flex flex-wrap gap-2 mb-2">
+                  <span
+                    v-for="(name, index) in editingDisplayNames"
+                    :key="index"
+                    class="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-sm bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400"
+                  >
+                    {{ name }}
+                    <button
+                      @click="removeDisplayName(index)"
+                      class="hover:text-blue-600 dark:hover:text-blue-300 transition-colors"
+                    >
+                      <X class="w-3 h-3" />
+                    </button>
+                  </span>
+                </div>
+              </div>
+              
+              <!-- Add New Display Name -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Add New Display Name
+                </label>
+                <div class="flex gap-2">
+                  <input
+                    v-model="newDisplayNameInput"
+                    @keydown="handleDisplayNameKeydown"
+                    type="text"
+                    placeholder="Type and press Enter to add..."
+                    class="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 text-sm"
+                  />
+                  <button
+                    @click="addDisplayName"
+                    class="px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                  >
+                    <Plus class="w-4 h-4" />
+                  </button>
+                </div>
+                <p class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                  Press Enter or comma to add, Backspace to remove last
+                </p>
+              </div>
+            </div>
+            
+            <!-- Modal Footer -->
+            <div class="flex items-center justify-end gap-3 p-4 border-t border-gray-200 dark:border-gray-700">
+              <button
+                @click="closeEditDisplayNameModal"
+                class="px-4 py-2 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                @click="saveDisplayNames"
+                class="px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 

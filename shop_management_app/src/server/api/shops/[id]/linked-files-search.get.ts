@@ -82,7 +82,7 @@ export default defineEventHandler(async (event) => {
         ai.name AS "filename",
         ai.preview_url AS "previewUrl",
         BOOL_OR(fj.published) AS "published",
-        MAX(dn.display_name) AS "displayName",
+        (ARRAY_AGG(DISTINCT dn.display_name) FILTER (WHERE dn.display_name IS NOT NULL)) AS "allDisplayNames",
         (ARRAY_AGG(DISTINCT fj.account_id)) AS "accountIds",
         (
           SELECT ARRAY_AGG(DISTINCT sa2.account_name ORDER BY sa2.account_name)
