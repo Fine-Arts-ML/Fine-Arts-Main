@@ -546,7 +546,7 @@ table {
 /* Sidebar transition */
 .sidebar-enter-active,
 .sidebar-leave-active {
-  transition: opacity 0.2s ease;
+  transition: opacity 0.3s ease;
 }
 
 .sidebar-enter-active div.relative,

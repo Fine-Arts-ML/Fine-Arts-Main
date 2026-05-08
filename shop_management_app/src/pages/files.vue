@@ -1271,20 +1271,25 @@ useHead({ title: 'Files - Art Management' })
 </template>
 
 <style scoped>
-/* Menu transition */
-.menu-enter-active,
-.menu-leave-active {
-  transition: opacity 0.3s ease, transform 0.3s ease;
+/* Sidebar transition */
+.sidebar-enter-active,
+.sidebar-leave-active {
+  transition: opacity 0.3s ease;
 }
-.menu-enter-from,
-.menu-leave-to {
+
+.sidebar-enter-active div.relative,
+.sidebar-leave-active div.relative {
+  transition: transform 0.2s ease;
+}
+
+.sidebar-enter-from,
+.sidebar-leave-to {
   opacity: 0;
-  transform: translateX(100%);
 }
-.menu-enter-to,
-.menu-leave-from {
-  opacity: 1;
-  transform: translateX(0);
+
+.sidebar-enter-from div.relative,
+.sidebar-leave-to div.relative {
+  transform: translateX(100%);
 }
 
 /* Custom scrollbar */
