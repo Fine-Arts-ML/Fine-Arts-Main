@@ -157,8 +157,6 @@ shop_management_app/
 │   │   │   │   ├── index.post.ts        # Create account
 │   │   │   │   └── [id].delete.ts       # Delete account
 │   │   │   ├── files/
-│   │   │   │   ├── index.get.ts         # List all files
-│   │   │   │   ├── index.post.ts        # Create file entry
 │   │   │   │   ├── search-by-name.get.ts    # Search by filename/display name
 │   │   │   │   ├── link-to-shop-account.post.ts # Link file to shop+account
 │   │   │   │   ├── unlink.post.ts             # Unlink file from shop/account
@@ -205,7 +203,6 @@ shop_management_app/
 │       ├── index.ts                     # Type exports
 │       ├── shop.ts                      # Shop-related types
 │       ├── account.ts                   # Account-related types
-│       ├── file.ts                      # File-related types (UNUSED)
 │       ├── linkedFile.ts                # Linked file types
 │       └── linkFiles.ts                 # File linking types
 ├── .env.example                         # Environment variables template
