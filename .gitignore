@@ -37,3 +37,4 @@ shop_management_app/UNUSED_FILES_REVIEW.md
 shop_management_app/UNUSED_CODE_CLEANUP.md
 shop_management_app/BROWSE_ALL_DEBUG_FINDINGS.md
 shop_management_app/plans/hash-calc-microservice.md
+shop_management_app/src/py-code/tag-service/tests/test_ocs_api.py

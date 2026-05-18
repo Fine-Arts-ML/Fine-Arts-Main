@@ -1,0 +1,55 @@
+/**
+ * Accessible Folders API
+ * Returns all folders from bre_index_config that users can access for scanning.
+ * This replaces the old admin-only folder selection with a user-facing tree view.
+ */
+
+import { Pool } from 'pg'
+
+export default defineEventHandler(async (event) => {
+  try {
+    const dbHost = process.env.DB_HOST || 'localhost'
+    const dbPort = Number(process.env.DB_PORT) || 5432
+    const dbName = process.env.DB_NAME || 'nextpsql'
+    const dbUser = process.env.DB_USER || 'nextuser'
+    const dbPassword = process.env.DB_PASSWORD || ''
+
+    const pool = new Pool({
+      host: dbHost,
+      port: dbPort,
+      database: dbName,
+      user: dbUser,
+      password: dbPassword,
+    })
+
+    try {
+      const result = await pool.query(
+        `SELECT config_value FROM bre_index_config WHERE config_key = 'selected_index_path'`
+      )
+
+      if (result.rows.length === 0) {
+        return {
+          success: true,
+          folders: [],
+          message: 'No folders configured yet. Please contact your administrator.',
+        }
+      }
+
+      const config = result.rows[0].config_value
+      const folders = config.folders || []
+
+      return {
+        success: true,
+        folders,
+      }
+    } finally {
+      await pool.end()
+    }
+  } catch (error: any) {
+    console.error('Error getting accessible folders:', error)
+    throw createError({
+      statusCode: 500,
+      statusMessage: error.message || 'Failed to get accessible folders',
+    })
+  }
+})

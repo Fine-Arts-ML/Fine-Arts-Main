@@ -14,6 +14,7 @@ export default defineNuxtConfig({
   modules: [
     '@nuxtjs/tailwindcss',
     '@pinia/nuxt',
+    'nuxt-auth-utils',
   ],
 
   css: ['~/assets/css/global.css'],
@@ -31,6 +32,31 @@ export default defineNuxtConfig({
       user: process.env.NC_ACC || '',
       password: process.env.NC_PASS || '',
     },
+    // Auth session config
+    sessionSecret: process.env.SESSION_SECRET || 'change-this-to-a-random-secret',
+    public: {
+      defaultRole: process.env.DEFAULT_ROLE || 'user',
+      isProduction: process.env.NODE_ENV === 'production',
+    },
+  },
+
+  // Session cookie configuration
+  // Secure cookies are only sent over HTTPS (enabled in production with Cloudflare Tunnel)
+  session: {
+    cookie: {
+      // Set to true in production with HTTPS
+      secure: process.env.SESSION_COOKIE_SECURE === 'true',
+      // SameSite=Lax provides CSRF protection while allowing top-level navigation
+      sameSite: process.env.SESSION_COOKIE_SAMESITE || 'lax',
+      // HTTP-only cookies are not accessible via JavaScript (prevents XSS attacks)
+      httpOnly: true,
+      // Cookie path
+      path: '/',
+      // Max age: 7 days by default
+      maxAge: 7 * 24 * 60 * 60,
+    },
+    // Session name (used for cookie name)
+    name: 'shop_session',
   },
 
   devServer: {
@@ -65,9 +91,9 @@ export default defineNuxtConfig({
 
   nitro: {
     storage: {
-      database: {
+      session: {
         driver: 'fs',
-        base: './data',
+        base: './data/sessions',
       },
     },
   },

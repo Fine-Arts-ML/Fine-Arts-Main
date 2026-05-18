@@ -13,8 +13,10 @@ services:
   app:
     image: shop-management-app:latest
     container_name: shop-management-app
-    ports:
-      - "3000:3000"
+    # Note: When using Cloudflare Tunnel, port 3000 is only exposed internally.
+    # External HTTPS access is provided by the tunnel service below.
+    expose:
+      - "3000"
     environment:
       - NODE_ENV=production
       - DB_HOST=${DB_HOST}
@@ -27,6 +29,9 @@ services:
       - NC_HOST=${NC_HOST}
       - RAG_SERVICE_URL=http://rag-search:8079
       - HASH_SERVICE_URL=http://hash-calc:8078
+      # Session cookie settings for HTTPS (Cloudflare Tunnel)
+      - SESSION_COOKIE_SECURE=true
+      - SESSION_COOKIE_SAMESITE=lax
     depends_on:
       rag-search:
         condition: service_started
@@ -90,14 +95,17 @@ services:
       retries: 3
       start_period: 10s
 
-  # Optional: Cloudflare Tunnel for secure remote access
-  # Remove this service if you don't use Cloudflare
-  # You'll need to set CLOUDFLARE_TOKEN in your .env file
+  # Cloudflare Tunnel for secure HTTPS access
+  # Get your token from: https://dash.cloudflare.com/?to=academy/courses/cloudflare-tunnel
+  # The tunnel creates an encrypted connection from your server to Cloudflare's network
+  # All traffic from users goes through HTTPS -> Cloudflare -> Tunnel -> Your App
   tunnel:
     image: cloudflare/cloudflared:latest
     container_name: shop-management-cloudflared
     restart: unless-stopped
-    command: tunnel run --token ${CLOUDFLARE_TOKEN}
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TOKEN}
+    depends_on:
+      - app
     networks:
       - shop-network
 

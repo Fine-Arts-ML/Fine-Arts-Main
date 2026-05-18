@@ -1,7 +1,9 @@
 // Database connection utility using PostgreSQL with Drizzle ORM
 import { drizzle } from 'drizzle-orm/node-postgres'
 import { Pool } from 'pg'
-import * as schema from './schema'
+import * as mainSchema from './schema'
+import * as authSchema from './auth-schema'
+import * as nextcloudSchema from './nextcloud-schema'
 
 let pool: Pool | null = null
 
@@ -21,7 +23,7 @@ export function getDb() {
       password: dbPassword,
     })
   }
-  return drizzle(pool, { schema })
+  return drizzle(pool, { schema: { ...mainSchema, ...authSchema, ...nextcloudSchema } })
 }
 
 export const db = getDb()

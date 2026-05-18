@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
+    "@node-rs/argon2": "^2.0.2",
     "@nuxtjs/tailwindcss": "^6.12.0",
     "@pinia/nuxt": "^0.5.1",
     "@radix-icons/vue": "^1.0.0",
@@ -28,11 +29,14 @@
     "jimp": "^0.22.12",
     "lucide-vue-next": "^0.400.0",
     "nuxt": "^3.13.0",
+    "nuxt-auth-utils": "^0.5.29",
     "pg": "^8.20.0",
     "pinia": "^2.1.7",
     "radix-vue": "^1.9.5",
     "tailwind-merge": "^2.5.2",
     "tailwindcss-animate": "^1.0.7",
+    "vis": "^4.21.0-EOL",
+    "vis-network": "^10.0.3",
     "vue": "^3.4.27",
     "vue-router": "^4.3.0",
     "zod": "^3.23.8"
