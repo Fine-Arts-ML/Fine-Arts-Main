@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { useAuth } from '~/composables/useAuth'
-import { 
-  Tag, 
+import { useImagePreview } from '~/composables/useImagePreview'
+import ImagePreviewModal from '~/components/ImagePreviewModal.vue'
+import {
+  Tag,
   RefreshCw,
   Search,
   Filter,
@@ -13,10 +15,23 @@ import {
   Trash2,
   Eye,
   EyeOff,
-  ZoomIn
+  ZoomIn,
+  Pin,
+  PinOff,
+  Plus,
+  Send,
+  ArrowUpDown
 } from 'lucide-vue-next'
 
 const { isAdmin, isAuthenticated } = useAuth()
+
+// ========== Image Preview ==========
+const { open: openPreview, close: closePreview, navigate: navigatePreview, state: previewState } = useImagePreview()
+
+// ========== Custom Description Input State ==========
+const showCustomDescriptionInput = ref(false)
+const newCustomDescription = ref('')
+const isCreatingDescription = ref(false)
 
 definePageMeta({
   layout: 'default',
@@ -53,10 +68,17 @@ interface GlobalStats {
   totalDescriptionMappings: number
 }
 
+interface FileTag {
+  id: number
+  name: string
+  color: string
+}
+
 interface FileDetail {
   file_id: string
   file_name: string
   preview_url: string
+  tags: FileTag[]
   descriptions: Array<{ id: number; description: string; pinned: boolean; createdAt: string }>
 }
 
@@ -109,7 +131,7 @@ const listPage = ref(0)
 const listTotal = ref(0)
 const listPageSize = 50
 const expandedListTag = ref<number | null>(null)
-const listTagFiles = ref<Array<{ file_id: string; file_name: string; has_description: boolean }>>([])
+const listTagFiles = ref<Array<{ file_id: string; file_name: string; has_description: boolean; preview_url?: string }>>([])
 const listTagFilesLoading = ref(false)
 
 // Descriptions view state
@@ -517,7 +539,12 @@ async function fetchListTagFiles(tagId: number) {
       method: 'GET',
       query: { tag_id: String(tagId), limit: '500', offset: '0' },
     })
-    listTagFiles.value = result.files || []
+    const files = result.files || []
+    // Transform files to include 16x16 preview URLs via the local proxy
+    listTagFiles.value = files.map((file: { file_id: string; file_name: string; has_description: boolean }) => ({
+      ...file,
+      preview_url: `/api/files/preview-proxy/${file.file_id}?x=16&y=16`,
+    }))
   } catch (error: any) {
     console.error('Failed to fetch tag files:', error)
   } finally {
@@ -574,6 +601,102 @@ async function fetchDescriptions() {
 
 async function onDescFileClick(fileId: string) {
   await fetchFileDetail(fileId)
+  // Set the correct state variable for the modal (FIX: was setting selectedFileDetail but modal checks selectedDescFileDetail)
+  selectedDescFileDetail.value = selectedFileDetail.value
+}
+
+// ========== Image Enlargement ==========
+function openEnlargedPreview(fileId: string, fileName: string) {
+  openPreview({
+    fileId: Number(fileId.replace(/\D/g, '')) || 0,
+    filename: fileName,
+    previewUrl: `/api/files/preview-proxy/${fileId}?x=1080&y=1080`,
+  })
+}
+
+// ========== Pin Toggle ==========
+async function togglePin(descriptionId: number, currentPinned: boolean) {
+  try {
+    const result = await $fetch('/api/settings/rag-index/description-pin', {
+      method: 'PUT',
+      body: { descriptionId, pinned: !currentPinned },
+    })
+    
+    // Update the description in place in the modal
+    if (selectedDescFileDetail.value) {
+      const desc = selectedDescFileDetail.value.descriptions.find((d: any) => d.id === descriptionId)
+      if (desc) {
+        desc.pinned = !currentPinned
+      }
+    }
+    
+    // Also update in the descriptions grid
+    const descEntry = descriptions.value.find(d => d.descriptions.some((d2: any) => d2.id === descriptionId))
+    if (descEntry) {
+      const desc = descEntry.descriptions.find((d2: any) => d2.id === descriptionId)
+      if (desc) {
+        desc.pinned = !currentPinned
+      }
+    }
+  } catch (error: any) {
+    console.error('Failed to toggle pin:', error)
+    alert(`Failed to toggle pin: ${error.message || 'Unknown error'}`)
+  }
+}
+
+// ========== Custom Description Creation ==========
+async function createCustomDescription() {
+  if (!selectedDescFileDetail.value || !newCustomDescription.value.trim()) return
+  if (newCustomDescription.value.trim().length < 10) {
+    alert('Description must be at least 10 characters long')
+    return
+  }
+  
+  isCreatingDescription.value = true
+  try {
+    const result = await $fetch('/api/settings/rag-index/description-create', {
+      method: 'POST',
+      body: {
+        file_id: selectedDescFileDetail.value.file_id,
+        description: newCustomDescription.value.trim(),
+      },
+    })
+    
+    // Add the new description to the modal
+    if (selectedDescFileDetail.value) {
+      selectedDescFileDetail.value.descriptions.push({
+        id: result.description.id,
+        description: result.description.description,
+        pinned: result.description.pinned,
+        createdAt: new Date().toISOString(),
+      })
+    }
+    
+    // Add/update in the descriptions grid
+    const descEntry = descriptions.value.find(d => d.file_id === selectedDescFileDetail.value.file_id)
+    if (descEntry) {
+      descEntry.descriptions.push({
+        id: result.description.id,
+        description: result.description.description,
+        pinned: result.description.pinned,
+        createdAt: new Date().toISOString(),
+      })
+    }
+    
+    // Reset input
+    newCustomDescription.value = ''
+    showCustomDescriptionInput.value = false
+  } catch (error: any) {
+    console.error('Failed to create description:', error)
+    alert(`Failed to create description: ${error.message || 'Unknown error'}`)
+  } finally {
+    isCreatingDescription.value = false
+  }
+}
+
+function cancelCustomDescription() {
+  newCustomDescription.value = ''
+  showCustomDescriptionInput.value = false
 }
 
 // ========== Lifecycle ==========
@@ -751,8 +874,9 @@ function refreshDescriptions() {
                   <img
                     :src="selectedFileDetail.preview_url"
                     :alt="selectedFileDetail.file_name"
-                    class="w-full h-40 object-cover"
-                    @error="$event.target.style.display='none'"
+                    class="w-full h-40 object-cover cursor-pointer"
+                    @click="openEnlargedPreview(selectedFileDetail.file_id, selectedFileDetail.file_name)"
+                    @error="(e: any) => e.target.style.display='none'"
                   />
                 </div>
                 
@@ -787,10 +911,18 @@ function refreshDescriptions() {
                     <div
                       v-for="desc in selectedFileDetail.descriptions"
                       :key="desc.id"
-                      class="p-2 bg-gray-50 dark:bg-gray-700 rounded text-sm text-gray-700 dark:text-gray-300"
+                      class="p-2 bg-gray-50 dark:bg-gray-700 rounded text-sm text-gray-700 dark:text-gray-300 flex items-start gap-1"
                     >
-                      {{ desc.description }}
-                      <span v-if="desc.pinned" class="ml-2 text-xs text-yellow-600">(pinned)</span>
+                      <button
+                        @click.stop="togglePin(desc.id, desc.pinned)"
+                        class="flex-shrink-0 mt-0.5 hover:scale-110 transition-transform"
+                        :title="desc.pinned ? 'Unpin' : 'Pin'"
+                      >
+                        <Pin v-if="desc.pinned" class="w-3.5 h-3.5 text-yellow-500 fill-yellow-500" />
+                        <PinOff v-else class="w-3.5 h-3.5 text-gray-400" />
+                      </button>
+                      <span v-if="desc.pinned" class="text-xs text-yellow-600 dark:text-yellow-400">(pinned)</span>
+                      <span class="flex-1">{{ desc.description }}</span>
                     </div>
                   </div>
                 </div>
@@ -879,49 +1011,62 @@ function refreshDescriptions() {
               </tr>
             </thead>
             <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-              <tr 
-                v-for="tag in listTags" 
-                :key="tag.id"
-                :class="expandedListTag === tag.id ? 'bg-blue-50 dark:bg-blue-900/10' : 'hover:bg-gray-50 dark:hover:bg-gray-700'"
-              >
-                <td class="px-4 py-3">
-                  <button
-                    @click="fetchListTagFiles(tag.id)"
-                    class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-                  >
-                    <ChevronDown v-if="expandedListTag === tag.id" class="w-4 h-4" />
-                    <ChevronUp v-else class="w-4 h-4" />
-                  </button>
-                </td>
-                <td class="px-4 py-3">
-                  <div class="flex items-center gap-2">
-                    <span class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ tag.name }}</span>
-                  </div>
-                </td>
-                <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{{ tag.num_files }}</td>
-                <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{{ tag.files_with_descriptions }} files</td><td class="px-4 py-3"><span class="px-2 py-1 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">Regular</span></td>
-              </tr>
+              <template v-for="tag in listTags" :key="tag.id">
+                <tr
+                  :class="expandedListTag === tag.id ? 'bg-blue-50 dark:bg-blue-900/10' : 'hover:bg-gray-50 dark:hover:bg-gray-700'"
+                >
+                  <td class="px-4 py-3">
+                    <button
+                      @click="fetchListTagFiles(tag.id)"
+                      class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    >
+                      <ChevronDown v-if="expandedListTag === tag.id" class="w-4 h-4" />
+                      <ChevronUp v-else class="w-4 h-4" />
+                    </button>
+                  </td>
+                  <td class="px-4 py-3">
+                    <div class="flex items-center gap-2">
+                      <span class="text-sm font-medium text-gray-900 dark:text-gray-100">{{ tag.name }}</span>
+                    </div>
+                  </td>
+                  <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{{ tag.num_files }}</td>
+                  <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">{{ tag.files_with_descriptions }} files</td>
+                  <td class="px-4 py-3"><span class="px-2 py-1 text-xs rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300">Regular</span></td>
+                </tr>
+                <!-- Expanded Tag Files Row - rendered inside v-for, directly after the selected tag -->
+                <tr v-if="expandedListTag === tag.id" class="bg-blue-50/50 dark:bg-blue-900/5">
+                  <td :colspan="5" class="px-4 py-0">
+                    <div class="p-3">
+                      <div v-if="listTagFilesLoading" class="flex items-center gap-2 py-2 text-sm text-gray-400">
+                        <RefreshCw class="w-4 h-4 animate-spin" />
+                        Loading files...
+                      </div>
+                      <div v-else class="space-y-1">
+                        <div
+                          v-for="file in listTagFiles"
+                          :key="file.file_id"
+                          class="flex items-center gap-2 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700 text-sm"
+                        >
+                          <div class="w-4 h-4 flex-shrink-0 flex items-center justify-center">
+                            <img
+                              v-if="file.preview_url"
+                              :src="file.preview_url"
+                              :alt="file.file_name"
+                              class="w-4 h-4 rounded object-cover"
+                              @error="(e) => (e.currentTarget.style.display = 'none')"
+                            />
+                            <ImageIcon v-show="!file.preview_url" class="w-4 h-4 text-gray-400" />
+                          </div>
+                          <span class="text-gray-700 dark:text-gray-300">{{ file.file_name }}</span>
+                          <FileText v-if="file.has_description" class="w-3 h-3 text-green-500" />
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </template>
             </tbody>
           </table>
-        </div>
-        
-        <!-- Expanded Tag Files -->
-        <div v-if="expandedListTag !== null" class="mt-2 ml-12">
-          <div v-if="listTagFilesLoading" class="flex items-center gap-2 py-2 text-sm text-gray-400">
-            <RefreshCw class="w-4 h-4 animate-spin" />
-            Loading files...
-          </div>
-          <div v-else class="space-y-1">
-            <div
-              v-for="file in listTagFiles"
-              :key="file.file_id"
-              class="flex items-center gap-2 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700 text-sm"
-            >
-              <ImageIcon class="w-4 h-4 text-gray-400" />
-              <span class="text-gray-700 dark:text-gray-300">{{ file.file_name }}</span>
-              <FileText v-if="file.has_description" class="w-3 h-3 text-green-500" />
-            </div>
-          </div>
         </div>
         
         <!-- Pagination -->
@@ -998,27 +1143,43 @@ function refreshDescriptions() {
             class="bg-gray-50 dark:bg-gray-700 rounded-lg border border-gray-200 dark:border-gray-600 overflow-hidden cursor-pointer hover:border-blue-300 dark:hover:border-blue-600 transition-colors"
             :class="selectedDescFileDetail?.file_id === desc.file_id ? 'border-blue-400 dark:border-blue-500 ring-2 ring-blue-200 dark:ring-blue-800' : ''"
           >
-            <!-- Thumbnail -->
-            <div class="h-32 bg-gray-200 dark:bg-gray-600 overflow-hidden">
+            <!-- Thumbnail with Enlarge Button -->
+            <div class="h-32 bg-gray-200 dark:bg-gray-600 overflow-hidden relative group">
               <img
                 :src="desc.preview_url"
                 :alt="desc.file_name"
                 class="w-full h-full object-cover"
-                @error="$event.target.style.display='none'"
+                @error="(e: any) => e.target.style.display='none'"
               />
+              <!-- Enlarge Button (Zoom) -->
+              <button
+                @click.stop="openEnlargedPreview(desc.file_id, desc.file_name)"
+                class="absolute top-2 right-2 p-1.5 rounded-md bg-black/50 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/70"
+                title="View enlarged"
+              >
+                <ZoomIn class="w-3.5 h-3.5" />
+              </button>
             </div>
             <!-- Content -->
             <div class="p-3">
               <p class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate mb-2">{{ desc.file_name }}</p>
-              <!-- All descriptions for this file -->
-              <div class="space-y-2">
+              <!-- All descriptions for this file with Pin buttons -->
+              <div class="space-y-1">
                 <div
                   v-for="d in desc.descriptions"
                   :key="d.id"
-                  class="text-xs text-gray-500 dark:text-gray-400"
+                  class="text-xs text-gray-500 dark:text-gray-400 flex items-start gap-1"
                 >
+                  <button
+                    @click.stop="togglePin(d.id, d.pinned)"
+                    class="flex-shrink-0 mt-0.5 hover:scale-110 transition-transform"
+                    :title="d.pinned ? 'Unpin' : 'Pin'"
+                  >
+                    <Pin v-if="d.pinned" class="w-3 h-3 text-yellow-500 fill-yellow-500" />
+                    <PinOff v-else class="w-3 h-3 text-gray-400" />
+                  </button>
                   <span v-if="d.pinned" class="text-yellow-600 dark:text-yellow-400 font-medium mr-1">📌</span>
-                  <span class="line-clamp-3">{{ d.description }}</span>
+                  <span class="line-clamp-3 flex-1">{{ d.description }}</span>
                 </div>
               </div>
               <div class="flex items-center gap-2 mt-2">
@@ -1057,8 +1218,9 @@ function refreshDescriptions() {
     <!-- File Detail Modal (for descriptions tab) -->
     <Teleport to="body">
       <div v-if="selectedDescFileDetail && activeTab === 'descriptions'" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" @click.self="selectedDescFileDetail = null">
-        <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+        <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 w-full max-w-3xl max-h-[90vh] overflow-y-auto">
           <div class="p-6">
+            <!-- Header -->
             <div class="flex items-center justify-between mb-4">
               <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">{{ selectedDescFileDetail.file_name }}</h3>
               <button
@@ -1069,48 +1231,89 @@ function refreshDescriptions() {
               </button>
             </div>
             
-            <!-- Image Preview -->
-            <div class="mb-4 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700">
+            <!-- Image Preview with Enlarge Button -->
+            <div class="mb-4 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700 relative group">
               <img
                 :src="selectedDescFileDetail.preview_url"
                 :alt="selectedDescFileDetail.file_name"
-                class="w-full h-64 object-cover"
-                @error="$event.target.style.display='none'"
+                class="w-full h-80 object-cover"
+                @error="(e: any) => e.target.style.display='none'"
               />
+              <!-- Enlarge Button Overlay -->
+              <button
+                @click="openEnlargedPreview(selectedDescFileDetail.file_id, selectedDescFileDetail.file_name)"
+                class="absolute bottom-3 right-3 p-2 rounded-md bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80 flex items-center gap-2"
+                title="View enlarged"
+              >
+                <ZoomIn class="w-4 h-4" />
+                <span class="text-sm">Enlarge</span>
+              </button>
             </div>
+          
             
-            <!-- Tags -->
-            <div class="mb-4">
-              <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Tags:</p>
-              <div class="flex flex-wrap gap-2">
-                <span
-                  v-for="tag in selectedDescFileDetail.tags"
-                  :key="tag.id"
-                  class="px-3 py-1 text-sm rounded-full bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 flex items-center gap-1"
-                >
-                  {{ tag.name }}
-                  <button
-                    @click.stop="removeTagFromFile(tag.id, selectedDescFileDetail.file_id)"
-                    class="text-red-400 hover:text-red-600"
-                    title="Remove tag"
-                  >
-                    <X class="w-3 h-3" />
-                  </button>
-                </span>
-              </div>
-            </div>
-            
-            <!-- Descriptions -->
-            <div v-if="selectedDescFileDetail.descriptions.length > 0">
+            <!-- Descriptions with Pin Toggle -->
+            <div v-if="selectedDescFileDetail.descriptions.length > 0" class="mb-4">
               <p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Descriptions:</p>
               <div class="space-y-2">
                 <div
                   v-for="desc in selectedDescFileDetail.descriptions"
                   :key="desc.id"
-                  class="p-3 bg-gray-50 dark:bg-gray-700 rounded text-sm text-gray-700 dark:text-gray-300"
+                  class="p-3 bg-gray-50 dark:bg-gray-700 rounded text-sm text-gray-700 dark:text-gray-300 flex items-start gap-2"
                 >
-                  {{ desc.description }}
-                  <span v-if="desc.pinned" class="ml-2 text-xs text-yellow-600">(pinned)</span>
+                  <button
+                    @click.stop="togglePin(desc.id, desc.pinned)"
+                    class="flex-shrink-0 mt-0.5 hover:scale-110 transition-transform"
+                    :title="desc.pinned ? 'Unpin' : 'Pin'"
+                  >
+                    <Pin v-if="desc.pinned" class="w-4 h-4 text-yellow-500 fill-yellow-500" />
+                    <PinOff v-else class="w-4 h-4 text-gray-400" />
+                  </button>
+                  <div class="flex-1">
+                    <span v-if="desc.pinned" class="inline-block px-1.5 py-0.5 text-xs font-medium text-yellow-600 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-900/30 rounded mr-2">📌 PINNED</span>
+                    <p>{{ desc.description }}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Write Custom Description Input -->
+            <div class="border-t border-gray-200 dark:border-gray-700 pt-4">
+              <button
+                v-if="!showCustomDescriptionInput"
+                @click="showCustomDescriptionInput = true"
+                class="px-4 py-2 text-sm bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 flex items-center gap-2"
+              >
+                <Plus class="w-4 h-4" />
+                Write Custom Description
+              </button>
+              
+              <div v-else class="space-y-3">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Custom Description:</label>
+                  <textarea
+                    v-model="newCustomDescription"
+                    rows="4"
+                    placeholder="Write your description here (min. 10 characters)..."
+                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  ></textarea>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button
+                    @click="createCustomDescription"
+                    :disabled="isCreatingDescription || !newCustomDescription.trim()"
+                    class="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <Send v-if="!isCreatingDescription" class="w-4 h-4" />
+                    <Loader2 v-else class="w-4 h-4 animate-spin" />
+                    {{ isCreatingDescription ? 'Creating...' : 'Create Description' }}
+                  </button>
+                  <button
+                    @click="cancelCustomDescription"
+                    class="px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 flex items-center gap-2"
+                  >
+                    <X class="w-4 h-4" />
+                    Cancel
+                  </button>
                 </div>
               </div>
             </div>
@@ -1118,6 +1321,9 @@ function refreshDescriptions() {
         </div>
       </div>
     </Teleport>
+
+    <!-- Image Preview Modal (Enlarged View) -->
+    <ImagePreviewModal :state="previewState" :close="closePreview" :navigate="navigatePreview" />
   </div>
 </template>
 
