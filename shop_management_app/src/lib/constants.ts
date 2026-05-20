@@ -22,3 +22,8 @@ export const TABS = {
   OVERVIEW: 'overview',
   ADD_FILES: 'add-files',
 } as const
+
+// Utility function to merge class names
+export function cn(...classes: (string | undefined | null | false)[]) {
+  return classes.filter(Boolean).join(' ')
+}

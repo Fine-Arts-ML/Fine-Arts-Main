@@ -146,6 +146,25 @@ async function handleLogout() {
               <span class="font-medium">Performance</span>
             </NuxtLink>
           </li>
+          <!-- Galleries section (authenticated users only) -->
+          <li v-if="isAuthenticated">
+            <div class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 px-3 mt-4">
+              Galleries
+            </div>
+            <ul class="space-y-1 ml-2 border-l border-gray-200 dark:border-gray-700 pl-4">
+              <li>
+                <NuxtLink
+                  to="/galleries"
+                  class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors"
+                  active-class="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+                  inactive-class="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                >
+                  <span class="text-lg">🖼️</span>
+                  <span class="font-medium">Gallery Management</span>
+                </NuxtLink>
+              </li>
+            </ul>
+          </li>
           <!-- Tags & Tagging section (authenticated users only) -->
           <li v-if="isAuthenticated">
             <div class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 px-3 mt-4">

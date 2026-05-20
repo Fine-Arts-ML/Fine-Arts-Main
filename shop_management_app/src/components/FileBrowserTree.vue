@@ -38,11 +38,14 @@ export interface TreeItem {
 const props = defineProps<{
   accessibleFolders: AccessibleFolder[]
   scanApiPath?: string
+  hideTagDescribeButton?: boolean
+  hideStagedFilter?: boolean
 }>()
 
 const emit = defineEmits<{
   'update:selectedFolders': [folders: Set<string>]
   'update:selectedFiles': [files: Set<string>]
+  'update:selectedFileIds': [ids: Set<number>]
   'scan': [paths: string[]]
   'filter-change': [filter: FileFilter]
   'proceed': []
@@ -209,9 +212,11 @@ function toggleItemSelection(item: TreeItem) {
   const selectedFilePaths = getSelectedFilePaths()
   // Persist selection directly on user interaction (not via watch)
   persistSelectedFolders(selectedPaths)
-  console.log('[FileBrowserTree] toggleItemSelection - emitted selectedFolders:', Array.from(selectedPaths), 'selectedFiles:', Array.from(selectedFilePaths))
+  const selectedFileIds = getSelectedFileIds()
+  console.log('[FileBrowserTree] toggleItemSelection - emitted selectedFolders:', Array.from(selectedPaths), 'selectedFiles:', Array.from(selectedFilePaths), 'selectedFileIds:', Array.from(selectedFileIds))
   emit('update:selectedFolders', selectedPaths)
   emit('update:selectedFiles', selectedFilePaths)
+  emit('update:selectedFileIds', selectedFileIds)
 }
 
 function setChildrenSelection(children: TreeItem[], selected: boolean) {
@@ -269,6 +274,25 @@ function getSelectedFilePaths(): Set<string> {
   
   collectFilePaths(rootFolders.value)
   return paths
+}
+
+// Get only selected FILE numeric IDs (from oc_filecache.fileid)
+function getSelectedFileIds(): Set<number> {
+  const ids = new Set<number>()
+  
+  function collectFileIds(items: TreeItem[]) {
+    for (const item of items) {
+      if (item.selected && item.type === 'file' && typeof item.fileid === 'number') {
+        ids.add(item.fileid)
+      }
+      if (item.children && item.type === 'directory') {
+        collectFileIds(item.children)
+      }
+    }
+  }
+  
+  collectFileIds(rootFolders.value)
+  return ids
 }
 
 // Persist selected folder paths to localStorage
@@ -423,9 +447,11 @@ function applyPersistedSelection(persistedPaths: string[]) {
   console.log('[FileBrowserTree] applyPersistedSelection - restored', restoredCount, 'of', persistedPaths.length, 'paths')
   const restoredPaths = getSelectedPaths()
   const restoredFilePaths = getSelectedFilePaths()
-  console.log('[FileBrowserTree] applyPersistedSelection - emitted restored selectedFolders:', Array.from(restoredPaths), 'selectedFiles:', Array.from(restoredFilePaths))
+  const restoredFileIds = getSelectedFileIds()
+  console.log('[FileBrowserTree] applyPersistedSelection - emitted restored selectedFolders:', Array.from(restoredPaths), 'selectedFiles:', Array.from(restoredFilePaths), 'selectedFileIds:', Array.from(restoredFileIds))
   emit('update:selectedFolders', restoredPaths)
   emit('update:selectedFiles', restoredFilePaths)
+  emit('update:selectedFileIds', restoredFileIds)
 }
 
 
@@ -441,9 +467,11 @@ function selectAll() {
   }
   const selectedPaths = getSelectedPaths()
   const selectedFilePaths = getSelectedFilePaths()
-  console.log('[FileBrowserTree] selectAll - emitted selectedFolders:', Array.from(selectedPaths), 'selectedFiles:', Array.from(selectedFilePaths))
+  const selectedFileIds = getSelectedFileIds()
+  console.log('[FileBrowserTree] selectAll - emitted selectedFolders:', Array.from(selectedPaths), 'selectedFiles:', Array.from(selectedFilePaths), 'selectedFileIds:', Array.from(selectedFileIds))
   emit('update:selectedFolders', selectedPaths)
   emit('update:selectedFiles', selectedFilePaths)
+  emit('update:selectedFileIds', selectedFileIds)
 }
 
 function isAllSelected(): boolean {
@@ -608,6 +636,7 @@ function formatDate(timestamp: number): string {
           <span class="px-1.5 py-0.5 rounded-full bg-red-200 dark:bg-red-800 text-red-800 dark:text-red-200 text-[10px]">{{ filteredCount.untagged }}</span>
         </button>
         <button
+          v-if="!hideStagedFilter"
           @click="handleFilterChange('staged')"
           :class="['px-2 py-1 text-xs rounded transition-colors flex items-center gap-1 opacity-60', activeFilter === 'staged' ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600']"
           title="Coming soon"
@@ -672,8 +701,9 @@ function formatDate(timestamp: number): string {
       </div>
     </div>
 
-    <!-- Proceed Button -->
+    <!-- Proceed Button (Tag & Describe) - hidden when hideTagDescribeButton prop is true -->
     <button
+      v-if="!hideTagDescribeButton"
       @click="handleProceed"
       :disabled="selectedCount === 0"
       class="w-full px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-colors flex-shrink-0 mt-3"

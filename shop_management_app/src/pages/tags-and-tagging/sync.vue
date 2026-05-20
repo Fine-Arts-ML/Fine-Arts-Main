@@ -303,7 +303,17 @@ function computeTagClusters(): ClusterGraphData {
     adjacency.get(edge.tag_id_2)!.set(edge.tag_id_1, currentWeight2 + edge.shared_files)
   }
   
-  // Remove hub tags from adjacency list (but keep track of their connections)
+  // ========== SAVE HUB NEIGHBOR MAP BEFORE DELETION ==========
+  // CRITICAL: We must save hub neighbor data BEFORE deleting hubs from adjacency,
+  // because the hub assignment code below needs this data to find the best cluster.
+  const hubNeighborMap = new Map<number, Map<number, number>>()
+  for (const hubTag of tags) {
+    if (hubTagIds.has(hubTag.id)) {
+      hubNeighborMap.set(hubTag.id, adjacency.get(hubTag.id) ?? new Map())
+    }
+  }
+  
+  // Remove hub tags from adjacency list
   for (const hubId of hubTagIds) {
     adjacency.delete(hubId)
     // Remove hub from other nodes' neighbor lists
@@ -374,10 +384,11 @@ function computeTagClusters(): ClusterGraphData {
   
   // ========== ASSIGN HUB TAGS TO CLUSTERS ==========
   // Hub tags are assigned to clusters based on their strongest connection to non-hub tags
+  // Uses the pre-saved hubNeighborMap (built before hub deletion)
   for (const hubTag of tags) {
     if (hubTagIds.has(hubTag.id) === false) continue // Skip non-hub tags
     
-    const hubNeighbors = adjacency.get(hubTag.id)
+    const hubNeighbors = hubNeighborMap.get(hubTag.id)
     if (!hubNeighbors || hubNeighbors.size === 0) {
       // Hub with no neighbors gets its own cluster label
       labels.set(hubTag.id, hubTag.id)
@@ -414,6 +425,21 @@ function computeTagClusters(): ClusterGraphData {
   // Build cluster info - only keep meaningful clusters
   const tagById = new Map(tags.map(t => [t.id, t]))
   const clusters: TagCluster[] = []
+  
+  // DIAGNOSTIC: Log hub tag assignments
+  const hubTagAssignments: { hubName: string; assignedLabel: string; assignedCluster: string }[] = []
+  for (const hubTag of tags) {
+    if (!hubTagIds.has(hubTag.id)) continue
+    const hubLabel = labels.get(hubTag.id)
+    const hubClusterTags = clusterTagMap.get(hubLabel ?? hubTag.id)
+    const hubClusterName = hubClusterTags ? hubClusterTags.map(id => tagById.get(id)?.name ?? '?').slice(0, 3).join(', ') : '(no tags in this cluster)'
+    hubTagAssignments.push({
+      hubName: hubTag.name,
+      assignedLabel: String(hubLabel ?? hubTag.id),
+      assignedCluster: hubClusterName
+    })
+  }
+  console.log('[CLUSTER DEBUG] Hub tag assignments:', hubTagAssignments.map(h => `${h.hubName} → label ${h.assignedLabel} (${h.assignedCluster})`).join(', '))
   
   // Calculate average files per tag for threshold
   const avgFilesPerTag = tags.reduce((sum, t) => sum + t.num_files, 0) / Math.max(tags.length, 1)
@@ -522,21 +548,15 @@ function computeTagClusters(): ClusterGraphData {
     }
   }
   
-  // Update file nodes to their strongest cluster (require clear winner)
+  // Update file nodes to their strongest cluster (assign to best match regardless of margin)
   for (const [fileId, clusterMap] of fileClusterWeights.entries()) {
     const sortedClusters = [...clusterMap.entries()].sort((a, b) => b[1] - a[1])
     if (sortedClusters.length === 0) continue
     
     const bestCluster = sortedClusters[0][0]
-    const bestWeight = sortedClusters[0][1]
-    const secondWeight = sortedClusters.length > 1 ? sortedClusters[1][1] : 0
-    
-    // Only assign if clear winner (at least 2x the second best)
-    if (sortedClusters.length === 1 || bestWeight >= secondWeight * 1.5) {
-      const fileNode = fileNodeMap.get(fileId)
-      if (fileNode) {
-        fileNode.clusterId = bestCluster
-      }
+    const fileNode = fileNodeMap.get(fileId)
+    if (fileNode) {
+      fileNode.clusterId = bestCluster
     }
   }
   
@@ -908,8 +928,6 @@ function renderClusteredNetwork(Network: any, DataSet: any, clusters: TagCluster
   
   // ========== HELPER: Show file nodes for a cluster ==========
   const showFileNodesForCluster = (clusterId: number, centroidX: number, centroidY: number) => {
-    console.log('[SHOW-FILES] clusterId:', clusterId, 'centroid:', { centroidX, centroidY })
-    
     const goldenAngle = Math.PI * (3 - Math.sqrt(5))
     const maxClusterRadius = 150
     
@@ -919,7 +937,24 @@ function renderClusteredNetwork(Network: any, DataSet: any, clusters: TagCluster
     const cluster = clusters.find(c => c.clusterId === clusterId)
     const color = cluster?.color ?? '#999'
     
-    console.log('[SHOW-FILES] clusterFileNodes:', clusterFileNodes.length, 'clusterOrphanNodes:', clusterOrphanNodes.length)
+    // DIAGNOSTIC: Log drill-down attempt
+    console.log('[DRILL-DOWN-DEBUG] clusterId:', clusterId, 'clusterName:', cluster?.name, 'centroid:', { centroidX, centroidY })
+    console.log('[DRILL-DOWN-DEBUG] clusterFileNodes:', clusterFileNodes.length, 'clusterOrphanNodes:', clusterOrphanNodes.length)
+    console.log('[DRILL-DOWN-DEBUG] total fileNodes in graph:', fileNodes.length, 'total orphanFiles:', orphanFiles.length)
+    
+    // Check: does this cluster have any files at all?
+    if (clusterFileNodes.length === 0 && clusterOrphanNodes.length === 0) {
+      console.warn('[DRILL-DOWN-DEBUG] NO FILES for cluster', clusterId, '- checking all cluster file assignments:')
+      const filesByCluster = new Map<number, number>()
+      fileNodes.forEach(f => {
+        filesByCluster.set(f.clusterId, (filesByCluster.get(f.clusterId) || 0) + 1)
+      })
+      console.log('[DRILL-DOWN-DEBUG] Files per cluster:', Object.fromEntries(filesByCluster))
+      const allClusterIds = new Set(fileNodes.map(f => f.clusterId))
+      console.log('[DRILL-DOWN-DEBUG] Clusters that have files:', Array.from(allClusterIds).sort((a,b) => a-b))
+      console.log('[DRILL-DOWN-DEBUG] All cluster IDs:', clusters.map(c => c.clusterId))
+      return
+    }
     
     const newFileNodes: any[] = []
     
@@ -983,8 +1018,6 @@ function renderClusteredNetwork(Network: any, DataSet: any, clusters: TagCluster
       })
     })
     
-    console.log('[SHOW-FILES] newFileNodes to add:', newFileNodes.length)
-    
     if (newFileNodes.length > 0) {
       // Check for existing nodes with same IDs
       const existingNodes = nodesDataSet.get()
@@ -992,14 +1025,11 @@ function renderClusteredNetwork(Network: any, DataSet: any, clusters: TagCluster
       const duplicateIds = newFileNodes.filter((n: any) => existingIds.has(n.id)).map((n: any) => n.id)
       
       if (duplicateIds.length > 0) {
-        console.warn('[SHOW-FILES] Duplicate IDs found:', duplicateIds.length, 'IDs:', duplicateIds.slice(0, 5))
         // Remove duplicates from newFileNodes
         const cleanFileNodes = newFileNodes.filter((n: any) => !existingIds.has(n.id))
-        console.log('[SHOW-FILES] After removing duplicates:', cleanFileNodes.length)
         nodesDataSet.add(cleanFileNodes)
       } else {
         nodesDataSet.add(newFileNodes)
-        console.log('[SHOW-FILES] Added successfully')
       }
     }
   }
@@ -1122,46 +1152,34 @@ function renderClusteredNetwork(Network: any, DataSet: any, clusters: TagCluster
   
   // ========== DOUBLE-CLICK HANDLER: Drill down into cluster ==========
   graphInstance.value.on('doubleClick', async (params: any) => {
-    console.log('[DRILL-DOWN] doubleClick event fired', params)
     if (params.nodes.length > 0) {
       const nodeId = params.nodes[0]
-      console.log('[DRILL-DOWN] clicked node:', nodeId)
       
       if (nodeId.startsWith('cluster-')) {
         const clusterId = parseInt(nodeId.replace('cluster-', ''))
-        console.log('[DRILL-DOWN] clusterId:', clusterId)
         
         // Clear any existing file nodes from previous drill-down
         clearAllFileNodes()
         
         // Get cluster position — getPositions returns an object { nodeId: {x, y} }
         const positionMap = graphInstance.value?.getPositions([nodeId])
-        console.log('[DRILL-DOWN] positionMap:', positionMap)
         const clusterPos = positionMap?.[nodeId]
         if (!clusterPos) {
-          console.warn('[DRILL-DOWN] No position available for node:', nodeId)
           return
         }
         
         // Show file nodes for this cluster
         showFileNodesForCluster(clusterId, clusterPos.x, clusterPos.y)
-        console.log('[DRILL-DOWN] showFileNodesForCluster called')
-        
-        // Update current nodes reference
-        currentNodes.value = nodesDataSet.get()
-        console.log('[DRILL-DOWN] currentNodes:', currentNodes.value.length)
         
         // Enter drill-down mode
         isDrillDown.value = true
         drilledClusterId.value = clusterId
-        console.log('[DRILL-DOWN] isDrillDown:', isDrillDown.value, 'drilledClusterId:', drilledClusterId.value)
         
         // Select the cluster
         selectedCluster.value = clusters.find(c => c.clusterId === clusterId) ?? null
         
         // Zoom to fit the cluster and its files (uses calculated bounding box, no network query needed)
         zoomToCluster(clusterId, clusterPos.x, clusterPos.y)
-        console.log('[DRILL-DOWN] zoomToCluster called')
       }
     }
   })
