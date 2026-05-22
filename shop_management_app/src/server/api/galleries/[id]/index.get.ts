@@ -3,6 +3,7 @@ import { db } from '~/lib/db'
 import { galleries, galleryImages, galleryAccess } from '~/lib/gallery-schema'
 import { ocFilecache } from '~/lib/nextcloud-schema'
 import { eq, and, asc } from 'drizzle-orm'
+import { Pool } from 'pg'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -65,6 +66,71 @@ export default defineEventHandler(async (event) => {
       .where(eq(galleryImages.galleryId, galleryId))
       .orderBy(asc(galleryImages.displayOrder))
 
+    // Build result array with descriptions
+    const imagesResult = imagesWithFiles.map(img => ({
+      id: img.id,
+      galleryId: img.galleryId,
+      fileId: img.fileId,
+      displayOrder: img.displayOrder,
+      caption: img.caption,
+      addedById: img.addedById,
+      addedAt: img.addedAt.toISOString(),
+      fileName: img.fileName,
+      path: img.path,
+      previewUrl: img.path,
+      description: null as string | null,
+    }))
+
+    // Hybrid approach: Fetch descriptions for all files in this gallery in a single query
+    if (imagesResult.length > 0) {
+      const dbHost = process.env.DB_HOST || 'localhost'
+      const dbPort = Number(process.env.DB_PORT) || 5432
+      const dbName = process.env.DB_NAME || 'nextpsql'
+      const dbUser = process.env.DB_USER || 'nextuser'
+      const dbPassword = process.env.DB_PASSWORD || ''
+
+      const pool = new Pool({
+        host: dbHost,
+        port: dbPort,
+        database: dbName,
+        user: dbUser,
+        password: dbPassword,
+      })
+
+      try {
+        // Build parameter placeholder string: $1, $2, $3, ...
+        const placeholders = imagesResult.map((_, i) => `$${i + 1}`).join(', ')
+        
+        // Fetch descriptions for all files in this gallery in one query
+        const descResult = await pool.query(
+          `SELECT d.file_id, d.description
+           FROM bre_descriptions d
+           WHERE d.file_id IN (${placeholders})
+           ORDER BY d.file_id, d.pinned DESC, d.created_at DESC`,
+          imagesResult.map(img => img.fileId.toString())
+        )
+
+        // Create a map of fileId -> description (only pinned first, then latest)
+        const descriptionMap = new Map<string, string>()
+        for (const row of descResult.rows) {
+          const fileId = row.file_id
+          if (!descriptionMap.has(fileId)) {
+            descriptionMap.set(fileId, row.description)
+          }
+        }
+
+        // Attach descriptions to result
+        for (const img of imagesResult) {
+          img.description = descriptionMap.get(img.fileId.toString()) || null
+        }
+      } catch (descError: any) {
+        console.error('[get-gallery] Warning: Failed to fetch descriptions:', descError.message)
+        // Continue without descriptions - non-critical
+      } finally {
+        await pool.end()
+      }
+    }
+
     // Get access list with guest info
     const { userAccounts } = await import('~/lib/auth-schema')
     const accessList = await db.select({
@@ -87,18 +153,7 @@ export default defineEventHandler(async (event) => {
       isActive: gallery.isActive,
       createdAt: gallery.createdAt.toISOString(),
       updatedAt: gallery.updatedAt.toISOString(),
-      images: imagesWithFiles.map(img => ({
-        id: img.id,
-        galleryId: img.galleryId,
-        fileId: img.fileId,
-        displayOrder: img.displayOrder,
-        caption: img.caption,
-        addedById: img.addedById,
-        addedAt: img.addedAt.toISOString(),
-        fileName: img.fileName,
-        path: img.path,
-        previewUrl: img.path,
-      })),
+      images: imagesResult,
       access: accessList.map(a => ({
         galleryId: a.galleryId,
         guestUserId: a.guestUserId,

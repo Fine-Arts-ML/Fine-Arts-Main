@@ -198,6 +198,9 @@ function formatDate(dateStr: string): string {
               <p v-if="image.caption" class="text-sm text-muted-foreground mt-1 line-clamp-2">
                 "{{ image.caption }}"
               </p>
+              <p v-else-if="image.description" class="text-sm text-muted-foreground mt-1 line-clamp-2">
+                "{{ image.description }}"
+              </p>
               <p v-else class="text-sm text-muted-foreground mt-1 line-clamp-1">
                 No description available
               </p>
@@ -247,42 +250,54 @@ function formatDate(dateStr: string): string {
               </button>
             </div>
 
-            <!-- Main Image -->
-            <div class="relative flex-1 flex items-center justify-center w-full max-h-[70vh]">
-              <img
-                v-if="currentImage"
-                :src="getLargePreviewUrl(currentImage.fileId)"
-                :alt="currentImage.caption || currentImage.fileName || ''"
-                class="max-w-full max-h-full object-contain rounded-lg"
-                @click="openLargePreview"
-              />
-            </div>
-
-            <!-- Image Info -->
-            <div v-if="currentImage" class="mt-4 text-center text-white max-w-2xl">
-              <h3 v-if="currentImage.fileName" class="font-medium">
-                {{ currentImage.fileName }}
-              </h3>
-              <p v-if="currentImage.caption" class="text-sm text-white/80 mt-1">
-                "{{ currentImage.caption }}"
-              </p>
-            </div>
-
-            <!-- Thumbnails -->
-            <div class="flex gap-2 mt-4 overflow-x-auto max-w-full pb-2 px-4">
-              <button
-                v-for="(image, index) in images"
-                :key="image.id"
-                class="flex-shrink-0 w-16 h-16 rounded-md overflow-hidden border-2 transition-colors"
-                :class="index === currentImageIndex ? 'border-white' : 'border-transparent'"
-                @click.stop="currentImageIndex = index"
-              >
+            <!-- Main Image and Info Container -->
+            <div class="relative flex-1 flex flex-col items-center w-full max-h-[85vh] overflow-y-auto">
+              <!-- Main Image -->
+              <div class="relative w-full flex items-center justify-center">
                 <img
-                  :src="getPreviewUrl(image.fileId, 100)"
-                  alt=""
-                  class="w-full h-full object-cover"
+                  v-if="currentImage"
+                  :src="getLargePreviewUrl(currentImage.fileId)"
+                  :alt="currentImage.caption || currentImage.fileName || ''"
+                  class="max-w-full max-h-[60vh] object-contain rounded-lg"
+                  @click="openLargePreview"
                 />
-              </button>
+              </div>
+
+              <!-- Description and Thumbnails Card -->
+              <div v-if="currentImage" class="w-full mt-4 bg-white/10 backdrop-blur-sm rounded-xl p-4">
+                <!-- Image Info -->
+                <div class="text-center">
+                  <h3 v-if="currentImage.fileName" class="font-medium text-white">
+                    {{ currentImage.fileName }}
+                  </h3>
+                  <p v-if="currentImage.caption" class="text-sm text-white/80 mt-2">
+                    "{{ currentImage.caption }}"
+                  </p>
+                  <p v-else-if="currentImage.description" class="text-sm text-white/80 mt-2">
+                    "{{ currentImage.description }}"
+                  </p>
+                </div>
+
+                <!-- Thin Line Separator -->
+                <div class="mt-4 mb-4 border-t border-white/20"></div>
+
+                <!-- Thumbnails -->
+                <div class="flex gap-2 overflow-x-auto pb-2 px-1">
+                  <button
+                    v-for="(image, index) in images"
+                    :key="image.id"
+                    class="flex-shrink-0 w-16 h-16 rounded-md overflow-hidden border-2 transition-colors"
+                    :class="index === currentImageIndex ? 'border-white' : 'border-transparent'"
+                    @click.stop="currentImageIndex = index"
+                  >
+                    <img
+                      :src="getPreviewUrl(image.fileId, 100)"
+                      alt=""
+                      class="w-full h-full object-cover"
+                    />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -312,6 +327,9 @@ function formatDate(dateStr: string): string {
               <h3 class="font-medium">{{ currentImage.fileName }}</h3>
               <p v-if="currentImage.caption" class="text-sm text-white/80 mt-1">
                 "{{ currentImage.caption }}"
+              </p>
+              <p v-else-if="currentImage.description" class="text-sm text-white/80 mt-1">
+                "{{ currentImage.description }}"
               </p>
             </div>
           </div>

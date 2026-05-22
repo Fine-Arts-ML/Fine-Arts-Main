@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   useGalleries,
   type Gallery,
@@ -32,6 +33,9 @@ import DialogFooter from '~/components/ui/DialogFooter.vue'
 import ImageAssignmentPanel from '~/components/gallery/ImageAssignmentPanel.vue'
 import AccessManagementPanel from '~/components/gallery/AccessManagementPanel.vue'
 
+// Router for navigation
+const router = useRouter()
+
 // Use composables
 const {
   galleries,
@@ -55,9 +59,6 @@ const selectedGalleryDetail = computed<GalleryDetail | null>(() => {
   const gallery = galleries.value.find((g: Gallery) => g.id === selectedGalleryId.value)
   return gallery as GalleryDetail | null
 })
-
-// Preview mode
-const previewMode = ref(false)
 
 // New gallery dialog
 const showNewGalleryDialog = ref(false)
@@ -87,7 +88,6 @@ onMounted(async () => {
 watch(selectedGalleryId, async (newId) => {
   if (newId) {
     await fetchGallery(newId)
-    previewMode.value = false
   }
 })
 
@@ -164,9 +164,11 @@ async function refreshGalleryData() {
   }
 }
 
-// Toggle preview mode
+// Toggle preview mode - navigates to guest gallery viewer
 function togglePreview() {
-  previewMode.value = !previewMode.value
+  if (selectedGalleryId.value) {
+    router.push(`/gallery/${selectedGalleryId.value}`)
+  }
 }
 
 // Preview URL helper
@@ -323,7 +325,7 @@ function closeAccessManagement() {
             <div class="flex items-center gap-2">
               <Button variant="outline" @click="togglePreview">
                 <Eye class="w-4 h-4 mr-2" />
-                {{ previewMode ? 'Exit Preview' : 'Preview Mode' }}
+                Preview as Guest
               </Button>
               <Button variant="outline" @click="startEdit(selectedGallery)">
                 <Pencil class="w-4 h-4 mr-2" />
@@ -334,17 +336,6 @@ function closeAccessManagement() {
                 Delete
               </Button>
             </div>
-          </div>
-
-          <!-- Preview Mode Indicator -->
-          <div v-if="previewMode" class="mb-6 p-4 bg-primary/5 border border-primary/20 rounded-lg">
-            <div class="flex items-center gap-2 text-primary mb-2">
-              <Eye class="w-4 h-4" />
-              <span class="font-medium">Preview Mode: ON</span>
-            </div>
-            <p class="text-sm text-muted-foreground">
-              You are viewing the gallery as a guest would see it. Changes made here will be saved.
-            </p>
           </div>
 
           <!-- Actions -->
