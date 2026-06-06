@@ -1,7 +1,7 @@
 # Shop Management Application - Technical Documentation
 
-> **Last Updated:** 2026-05-08  
-> **Version:** 1.0 (TypeScript Conversion)  
+> **Last Updated:** 2026-05-23
+> **Version:** 1.1 (Documentation Update)
 > **Framework:** Nuxt 3 (Vue 3 + TypeScript)
 
 ---
@@ -19,10 +19,12 @@
 9. [Pages](#pages)
 10. [Components](#components)
 11. [Types](#types)
-12. [Python Services](#python-services)
-13. [Development](#development)
-14. [Deployment](#deployment)
-15. [Dead Code & Deprecations](#dead-code--deprecations)
+12. [Authentication & Authorization](#authentication--authorization)
+13. [Python Services](#python-services)
+14. [Development](#development)
+15. [Deployment](#deployment)
+16. [Dead Code & Deprecations](#dead-code--deprecations)
+17. [Related Documentation](#related-documentation)
 
 ---
 
@@ -44,7 +46,7 @@ The Shop Management Application is a full-stack web application for managing art
 | **Display Names** | Link, unlink, and edit display names for shops, accounts, and files |
 | **Reverse Image Search** | Perceptual hash-based image similarity search (whash, ahash, phash) |
 | **RAG Semantic Search** | Natural language search using embedding models and TF-IDF |
-| **Theme Support** | Light/dark mode with system preference detection |
+| **Theme Support** | Light/dark mode |
 | **Nextcloud Integration** | Fetch preview images from Nextcloud servers via authenticated proxy |
 
 ---
@@ -292,19 +294,30 @@ The application uses PostgreSQL with the `bre_` prefix for all table names, indi
 
 ### Table Overview
 
-| Table Name | Drizzle Export | Purpose |
-|------------|----------------|---------|
-| `bre_shops` | [`shops`](src/lib/schema.ts:7) | Shop information |
-| `bre_shop_account` | [`accounts`](src/lib/schema.ts:13) | Account information |
-| `bre_shop_account_matrix` | [`shopAccountMatrix`](src/lib/schema.ts:19) | Many-to-many shop-account relationships |
-| `bre_account_index` | [`accountIndex`](src/lib/schema.ts:25) | File-to-account links (DEPRECATED) |
-| `bre_shops_index` | [`shopsIndex`](src/lib/schema.ts:31) | File-to-shop links (DEPRECATED) |
-| `bre_advance_index` | [`advanceIndex`](src/lib/schema.ts:37) | File metadata (name, preview URL) |
-| `bre_display_names` | [`displayName`](src/lib/schema.ts:44) | Tag/display name definitions |
-| `bre_display_name_index` | [`displayNameMatrix`](src/lib/schema.ts:50) | Tag-to-entity relationships |
-| `bre_file_junction` | [`fileJunction`](src/lib/schema.ts:60) | Triadic shop-file-account relationships (SOURCE OF TRUTH) |
-| `bre_hashes` | *(not in Drizzle schema)* | Perceptual hash values for reverse search |
-| `rag_model_settings` | [`ragModelSettings`](src/lib/schema.ts:68) | RAG model preferences |
+The following 20 tables exist in the database with the `bre_` prefix:
+
+| # | Table Name | Drizzle Export | Purpose |
+|---|------------|----------------|---------|
+| 1 | `bre_shops` | [`shops`](src/lib/schema.ts:7) | Shop/art account entities (user-input) |
+| 2 | `bre_shop_account` | [`accounts`](src/lib/schema.ts:13) | Individual art accounts (user-input) |
+| 3 | `bre_shop_account_matrix` | [`shopAccountMatrix`](src/lib/schema.ts:19) | Many-to-many shop-account relationships |
+| 4 | `bre_account_index` | [`accountIndex`](src/lib/schema.ts:25) | File-to-account links (critical data storage) |
+| 5 | `bre_shops_index` | [`shopsIndex`](src/lib/schema.ts:31) | File-to-shop links (critical data storage) |
+| 6 | `bre_advance_index` | [`advanceIndex`](src/lib/schema.ts:37) | File metadata (name, preview URL) |
+| 7 | `bre_display_names` | [`displayName`](src/lib/schema.ts:44) | Display name definitions |
+| 8 | `bre_display_name_index` | [`displayNameMatrix`](src/lib/schema.ts:50) | Display name to entity relationships |
+| 9 | `bre_file_junction` | [`fileJunction`](src/lib/schema.ts:60) | Triadic shop-file-account relationships (query optimization) |
+| 10 | `bre_hashes` | *(not in Drizzle schema)* | Perceptual hash values for reverse search |
+| 11 | `bre_galleries` | [`galleries`](src/lib/gallery-schema.ts:9) | Gallery master records |
+| 12 | `bre_gallery_access` | [`galleryAccess`](src/lib/gallery-schema.ts:21) | Gallery guest access mappings |
+| 13 | `bre_gallery_images` | [`galleryImages`](src/lib/gallery-schema.ts:30) | Gallery-to-image mappings |
+| 14 | `bre_user_accounts` | [`userAccounts`](src/lib/auth-schema.ts:8) | App user accounts with roles |
+| 15 | `bre_sessions` | [`sessions`](src/lib/auth-schema.ts:19) | Server-side session storage |
+| 16 | `bre_descriptions` | [`breDescriptions`](src/lib/nextcloud-schema.ts:122) | Production descriptions with pinning |
+| 17 | `bre_descriptions_staging` | [`breDescriptionsStaging`](src/lib/nextcloud-schema.ts:113) | Staged descriptions per session |
+| 18 | `bre_index_config` | [`breIndexConfig`](src/lib/nextcloud-schema.ts:132) | Re-index configuration |
+| 19 | `bre_tags_staging` | [`breTagsStaging`](src/lib/nextcloud-schema.ts:94) | Staged tags per session |
+| 20 | `bre_tag_map_staging` | [`breTagMapStaging`](src/lib/nextcloud-schema.ts:104) | Staged tag-to-file mappings |
 
 ### Schema Definitions
 
@@ -381,18 +394,6 @@ export const displayNameMatrix = pgTable('bre_display_name_index', {
   shopId: bigint('shop_id', { mode: 'number' }).references(() => shops.shopId),
   accountId: bigint('account_id', { mode: 'number' }).references(() => accounts.accountId),
   fileId: text('file_id'),
-})
-```
-
-#### RAG Model Settings (`rag_model_settings`)
-
-```typescript
-export const ragModelSettings = pgTable('rag_model_settings', {
-  id: serial('id').primaryKey(),
-  key: text('key').notNull().unique(),
-  value: text('value').notNull(),
-  description: text('description'),
-  updatedAt: text('updated_at'),
 })
 ```
 
@@ -1023,14 +1024,14 @@ docker run -p 3000:3000 \
 |------|--------|--------|
 | `src/types/file.ts` | Exported but never imported | Can be safely removed |
 
-### Deprecated Database Tables
+### Active Database Tables (Previously Misidentified)
 
 | Table | Status | Notes |
 |-------|--------|-------|
-| `bre_account_index` | Deprecated | Still used by some endpoints, replaced by `bre_file_junction` |
-| `bre_shops_index` | Deprecated | Still used by some endpoints, replaced by `bre_file_junction` |
+| `bre_account_index` | **ACTIVE** | Critical data storage - stores account-file associations (user-input data) |
+| `bre_shops_index` | **ACTIVE** | Critical data storage - stores shop-file associations (user-input data) |
 
-**Note:** These tables are still actively queried by several API endpoints. A full migration would require updating all queries to use `bre_file_junction`. See [`DEAD_CODE_ANALYSIS.md`](DEAD_CODE_ANALYSIS.md) for details.
+**Note:** These tables are NOT deprecated. They store critical user-input data about which files belong to which shops and accounts. The `bre_file_junction` table is an optimization layer that provides faster query performance through a triadic relationship, but `bre_account_index` and `bre_shops_index` remain the authoritative sources for the data. See [`docs/depreciated-code.md`](docs/depreciated-code.md) for details.
 
 ### Placeholder Pages
 
@@ -1051,4 +1052,19 @@ Key commits affecting the current codebase:
 | `4033bbc` | Added display names linking, unlinking & editing | New feature |
 | `ccf3682` | Fixed orphaned display names deletion | Bug fix |
 
-For a complete dead code analysis, see [`DEAD_CODE_ANALYSIS.md`](DEAD_CODE_ANALYSIS.md).
+## Related Documentation
+
+The following standalone documentation files provide detailed information about specific aspects of the application:
+
+| Document | Path | Description |
+|----------|------|-------------|
+| Pages Documentation | [`docs/pages.md`](docs/pages.md) | Comprehensive documentation for all 20+ page components |
+| Database Schema | [`docs/database-schema.md`](docs/database-schema.md) | All database tables, columns, relationships, and ERD |
+| Authentication & Authorization | [`docs/authentication.md`](docs/authentication.md) | Auth flow, RBAC, middleware, and API endpoints |
+| Depreciated Code | [`docs/depreciated-code.md`](docs/depreciated-code.md) | Inventory of unused/deprecated code with removal priorities |
+| API Reference | [`docs/api-reference.md`](docs/api-reference.md) | All 70+ API endpoints with request/response details |
+| Composables | [`docs/composables.md`](docs/composables.md) | All Vue composables with TypeScript interfaces |
+| Components | [`docs/components.md`](docs/components.md) | All UI and domain components with props and events |
+| Project Overview | [`docs/project-overview.md`](docs/project-overview.md) | Application summary, architecture, and getting started |
+
+For a complete dead code analysis, see [`docs/depreciated-code.md`](docs/depreciated-code.md).

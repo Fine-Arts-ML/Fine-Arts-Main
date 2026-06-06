@@ -30,11 +30,8 @@ typescript/shop_management/shop_management-rag-search-latest.tar.gz
 **/*Dockerimage*/
 **/*rag-models*/
 **/tfidf-index*/
-shop_management_app/shop_management-app-latest.tar.gz
-shop_management_app/shop_management-rag-search-latest.tar.gz
-shop_management_app/UNIFIED_FILES_TAB_PLAN.md
-shop_management_app/UNUSED_FILES_REVIEW.md
-shop_management_app/UNUSED_CODE_CLEANUP.md
-shop_management_app/BROWSE_ALL_DEBUG_FINDINGS.md
-shop_management_app/plans/hash-calc-microservice.md
+plans
 shop_management_app/src/py-code/tag-service/tests/test_ocs_api.py
+docs
+.gitignore
+docs-tasks
