@@ -3,7 +3,6 @@ import { onMounted, computed, ref, watch, reactive } from 'vue'
 import { useAuth } from '~/composables/useAuth'
 import { useTagPipeline } from '~/composables/useTagPipeline'
 import { useImagePreview } from '~/composables/useImagePreview'
-import PipelineNavBar from '~/components/PipelineNavBar.vue'
 import ImagePreviewModal from '~/components/ImagePreviewModal.vue'
 import { ChevronDown, ChevronUp, Sparkles, Loader2, ArrowLeft, ArrowRight, Settings2, X, XCircle, Play } from 'lucide-vue-next'
 
@@ -13,11 +12,8 @@ const {
   selectedFiles,
   generatedTags,
   generatedDescriptions,
-  currentStep,
-  steps,
   setGeneratedTags,
   setGeneratedDescription,
-  isStepComplete,
   removeFileId,
   clearSelection,
 } = useTagPipeline()
@@ -635,13 +631,6 @@ watch(selectedFilesList, () => {
 
 <template>
   <div class="space-y-6">
-    <!-- Pipeline Navigation -->
-    <PipelineNavBar
-      :steps="steps"
-      :current-step="currentStep"
-      :complete-steps="steps.filter(s => isStepComplete(s.id) && s.id !== currentStep).map(s => s.id)"
-    />
-
     <!-- Settings Panel -->
     <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
       <button @click="tagSettingsExpanded = !tagSettingsExpanded" class="w-full p-4 flex items-center justify-between bg-gradient-to-r from-purple-900/30 to-blue-900/20 dark:from-purple-900/40 dark:to-blue-900/30 hover:from-purple-900/40 hover:to-blue-900/30 transition-colors">

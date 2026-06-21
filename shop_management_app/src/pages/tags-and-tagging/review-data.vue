@@ -2,7 +2,6 @@
 import { onMounted, ref, computed } from 'vue'
 import { useAuth } from '~/composables/useAuth'
 import { useTagPipeline } from '~/composables/useTagPipeline'
-import PipelineNavBar from '~/components/PipelineNavBar.vue'
 import {
   Tag,
   FileText,
@@ -24,7 +23,7 @@ import {
 } from 'lucide-vue-next'
 
 const { isAdmin } = useAuth()
-const { currentStep, steps, setStep, selectedFiles } = useTagPipeline()
+const { selectedFiles } = useTagPipeline()
 
 definePageMeta({
   middleware: 'tags-pipeline',
@@ -390,17 +389,10 @@ onMounted(() => {
   <div class="space-y-6">
     <!-- Header -->
     <div class="flex items-center justify-between">
-      <div class="flex items-center gap-4">
-        <PipelineNavBar :current-step="currentStep" :steps="steps" :complete-steps="[]" />
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">Review Data</h1>
       </div>
       <div class="flex items-center gap-2">
-        <button
-          @click="() => setStep('tags')"
-          class="flex items-center gap-2 px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-        >
-          <ArrowLeft class="w-4 h-4" />
-          Back to Tags
-        </button>
       </div>
     </div>
 
@@ -432,12 +424,12 @@ onMounted(() => {
       <p class="text-gray-600 dark:text-gray-400 mb-6 text-center max-w-md">
         There are no staged tags or descriptions to review. Generate tags or descriptions on the "Tags & Descriptions" page first.
       </p>
-      <button
-        @click="() => setStep('tags')"
+      <NuxtLink
+        to="/tags-and-tagging/tags"
         class="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
       >
         Go to Tags & Descriptions
-      </button>
+      </NuxtLink>
     </div>
 
     <!-- Main Content -->

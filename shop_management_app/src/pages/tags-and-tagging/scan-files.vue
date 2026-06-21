@@ -2,7 +2,6 @@
 import { onMounted, computed, ref } from 'vue'
 import { useAuth } from '~/composables/useAuth'
 import { useTagPipeline } from '~/composables/useTagPipeline'
-import PipelineNavBar from '~/components/PipelineNavBar.vue'
 import FileBrowserTree from '~/components/FileBrowserTree.vue'
 import type { FileFilter as TreeFileFilter } from '~/components/FileBrowserTree.vue'
 import {
@@ -13,10 +12,7 @@ import {
 const { isAdmin, isAuthenticated } = useAuth()
 const {
   selectedFileIds,
-  currentStep,
-  steps,
   setSelectedFiles,
-  isStepComplete,
 } = useTagPipeline()
 
 definePageMeta({
@@ -141,13 +137,6 @@ async function handleProceed() {
 
 <template>
   <div class="space-y-6 flex flex-col h-full">
-    <!-- Pipeline Navigation -->
-    <PipelineNavBar
-      :steps="steps"
-      :current-step="currentStep"
-      :complete-steps="steps.filter(s => isStepComplete(s.id) && s.id !== currentStep).map(s => s.id)"
-    />
-
     <!-- File Browser Tree -->
     <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col flex-1 min-h-0">
       <div class="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 flex-shrink-0">
