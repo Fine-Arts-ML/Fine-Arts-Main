@@ -2,16 +2,13 @@
 export default defineNuxtPlugin((nuxtApp) => {
   // This runs on both SSR and client, but we only care about client-side
   if (typeof window !== 'undefined') {
-    // Get the theme that was applied by the inline script
-    const isDark = document.documentElement.classList.contains('dark')
-    const theme = isDark ? 'dark' : 'light'
-    
-    // Force the theme into localStorage if not already there
-    if (!localStorage.getItem('theme')) {
-      localStorage.setItem('theme', theme)
+    // Ensure localStorage has a valid theme value
+    const saved = localStorage.getItem('theme')
+    if (saved !== 'light' && saved !== 'dark' && saved !== 'auto') {
+      localStorage.setItem('theme', 'auto')
     }
     
     // Log for debugging
-    console.log('[theme plugin] Initial theme:', theme, 'isDark:', isDark)
+    console.log('[theme plugin] Initial theme:', localStorage.getItem('theme'))
   }
 })

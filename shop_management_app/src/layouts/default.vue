@@ -1,23 +1,70 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
-import { ChevronRight, ChevronLeft, LogOut, User, Settings, ChevronDown, ChevronUp } from 'lucide-vue-next'
+import { ref, onMounted, onUnmounted, watch } from 'vue'
+import {
+  ChevronRight, ChevronLeft, LogOut, User, Settings, ChevronDown, ChevronUp,
+  Sun, Moon, Monitor,
+  // Sidebar section/menu icons (replacing emojis)
+  Building2, Store, Folder, Link, BarChart3,
+  GalleryVertical, ClipboardList, Tag, ScanLine,
+  PenTool, CheckSquare, RotateCw, Brain, FolderOpen, Users,
+} from 'lucide-vue-next'
 import { useTheme } from '~/composables/useTheme'
 import { useAuth } from '~/composables/useAuth'
+import { useRoute } from 'vue-router'
 
-const { theme } = useTheme()
+const { theme, applyTheme, getResolvedTheme } = useTheme()
 const { user, logout, isAuthenticated, isAdmin } = useAuth()
+const route = useRoute()
+
+// Section expand/collapse state — all collapsed by default
+const sectionState = ref<Record<string, boolean>>({
+  shopsFiles: false,
+  galleries: false,
+  tags: false,
+  settings: false,
+})
+
+function toggleSection(section: string) {
+  sectionState.value[section] = !sectionState.value[section]
+  try {
+    localStorage.setItem('sidebarSections', JSON.stringify(sectionState.value))
+  } catch (e) { /* ignore localStorage errors */ }
+}
+
+function autoExpandSection() {
+  const path = route.path
+  if (path.startsWith('/shops') || path.startsWith('/files') || path.startsWith('/linked-files') || path.startsWith('/performance')) sectionState.value.shopsFiles = true
+  if (path.startsWith('/tags-and-tagging')) sectionState.value.tags = true
+  if (path.startsWith('/settings/app')) sectionState.value.settings = true
+  if (path.startsWith('/gallery') || path.startsWith('/galleries')) sectionState.value.galleries = true
+}
 
 onMounted(() => {
-  // Sync Vue theme ref with actual DOM state (set by inline script in nuxt.config.ts)
-  // This fixes the hydration mismatch where SSR renders 'light' but DOM is 'dark'
-  const isDark = document.documentElement.classList.contains('dark')
-  if (theme.value !== (isDark ? 'dark' : 'light')) {
-    theme.value = isDark ? 'dark' : 'light'
-  }
-
+  // Theme state is already synced from localStorage by useTheme() composable
   // Close user menu when clicking outside (added after mount when DOM is ready)
   document.addEventListener('mousedown', handleOutsideClick)
+
+  // Load saved section state from localStorage
+  try {
+    const saved = localStorage.getItem('sidebarSections')
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      // Merge with defaults, ensuring shopsFiles is initialized
+      sectionState.value = {
+        shopsFiles: false,
+        galleries: parsed.galleries ?? false,
+        tags: parsed.tags ?? false,
+        settings: parsed.settings ?? false,
+      }
+    }
+  } catch (e) { /* ignore invalid data */ }
+
+  // Auto-expand section based on current route
+  autoExpandSection()
 })
+
+// Watch for route changes and auto-expand relevant section
+watch(() => route.path, autoExpandSection)
 
 onUnmounted(() => {
   document.removeEventListener('mousedown', handleOutsideClick)
@@ -30,6 +77,14 @@ const isHoveringLeftEdge = ref(false)
 const showUserMenu = ref(false)
 let mouseMoveTimer: ReturnType<typeof setTimeout> | null = null
 let positionUpdateTimer: ReturnType<typeof setTimeout> | null = null
+
+// Theme mode selector
+function setThemeMode(mode: 'light' | 'dark' | 'auto') {
+  applyTheme(mode)
+  theme.value = mode
+}
+
+const resolvedTheme = computed(() => getResolvedTheme())
 
 function handleOutsideClick(e: MouseEvent) {
   const el = document.querySelector('[data-user-menu]')
@@ -80,10 +135,10 @@ async function handleLogout() {
 </script>
 
 <template>
-  <div class="min-h-screen flex w-full" :class="theme === 'dark' ? 'dark bg-gray-900' : 'bg-gray-50'">
+  <div class="min-h-screen flex w-full bg-gray-50 dark:bg-gray-900">
     <!-- Sidebar -->
     <aside
-      class="bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-300 overflow-hidden"
+      class="bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col transition-all duration-300 overflow-x-hidden sticky top-0 h-dvh"
       :class="collapsed ? 'w-0' : 'w-64'"
       :style="collapsed ? 'min-width: 0' : 'min-width: 16rem'"
     >
@@ -100,164 +155,243 @@ async function handleLogout() {
       </div>
 
       <!-- Navigation -->
-      <nav class="flex-1 p-4 overflow-hidden">
+      <nav class="flex-1 p-4 overflow-y-auto">
         <ul class="space-y-2">
+          <!-- Shops & Files section -->
           <li>
-            <NuxtLink
-              to="/shops"
-              class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors"
-              active-class="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-              inactive-class="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+            <button
+              @click="toggleSection('shopsFiles')"
+              class="w-full flex items-center justify-between text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-widest px-3 py-3 mt-2 border-b border-gray-300 dark:border-gray-600"
             >
-              <span class="text-xl">🏪</span>
-              <span class="font-medium">Shops & Accounts</span>
-            </NuxtLink>
-          </li>
-          <li>
-            <NuxtLink
-              to="/files"
-              class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors"
-              active-class="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-              inactive-class="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+              <span class="flex items-center gap-2">
+                <Building2 class="w-5 h-5" />
+                Shops & Files
+              </span>
+              <component :is="sectionState.shopsFiles ? ChevronUp : ChevronDown" class="w-4 h-4 text-gray-600 dark:text-gray-400 transition-transform duration-200" />
+            </button>
+            <transition
+              enter-active-class="transition-all duration-200 ease-out"
+              enter-from-class="max-h-0 opacity-0"
+              enter-to-class="max-h-[400px] opacity-100"
+              leave-from-class="max-h-[400px] opacity-100"
+              leave-to-class="max-h-0 opacity-0"
             >
-              <span class="text-xl">📁</span>
-              <span class="font-medium">Files</span>
-            </NuxtLink>
-          </li>
-          <li>
-            <NuxtLink
-              to="/linked-files"
-              class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors"
-              active-class="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-              inactive-class="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-            >
-              <span class="text-xl">🔗</span>
-              <span class="font-medium">Linked Files</span>
-            </NuxtLink>
-          </li>
-          <li>
-            <NuxtLink
-              to="/performance"
-              class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors"
-              active-class="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-              inactive-class="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-            >
-              <span class="text-xl">📊</span>
-              <span class="font-medium">Performance</span>
-            </NuxtLink>
+              <div
+                v-show="sectionState.shopsFiles"
+                class="mt-1 ml-1 space-y-0.5 overflow-hidden"
+              >
+                <li>
+                  <NuxtLink
+                    to="/shops"
+                    class="flex items-center gap-3 px-3 py-2 rounded-md transition-colors"
+                    active-class="bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                    inactive-class="text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                  >
+                    <Store class="w-4 h-4 opacity-80" />
+                    <span class="text-sm font-normal">Shops & Accounts</span>
+                  </NuxtLink>
+                </li>
+                <li>
+                  <NuxtLink
+                    to="/files"
+                    class="flex items-center gap-3 px-3 py-2 rounded-md transition-colors"
+                    active-class="bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                    inactive-class="text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                  >
+                    <Folder class="w-4 h-4 opacity-80" />
+                    <span class="text-sm font-normal">Files</span>
+                  </NuxtLink>
+                </li>
+                <li>
+                  <NuxtLink
+                    to="/linked-files"
+                    class="flex items-center gap-3 px-3 py-2 rounded-md transition-colors"
+                    active-class="bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                    inactive-class="text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                  >
+                    <Link class="w-4 h-4 opacity-80" />
+                    <span class="text-sm font-normal">Linked Files</span>
+                  </NuxtLink>
+                </li>
+                <li>
+                  <NuxtLink
+                    to="/performance"
+                    class="flex items-center gap-3 px-3 py-2 rounded-md transition-colors"
+                    active-class="bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                    inactive-class="text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                  >
+                    <BarChart3 class="w-4 h-4 opacity-80" />
+                    <span class="text-sm font-normal">Performance</span>
+                  </NuxtLink>
+                </li>
+              </div>
+            </transition>
           </li>
           <!-- Galleries section (authenticated users only) -->
           <li v-if="isAuthenticated">
-            <div class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 px-3 mt-4">
-              Galleries
-            </div>
-            <ul class="space-y-1 ml-2 border-l border-gray-200 dark:border-gray-700 pl-4">
-              <li>
-                <NuxtLink
-                  to="/galleries"
-                  class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors"
-                  active-class="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                  inactive-class="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
-                  <span class="text-lg">🖼️</span>
-                  <span class="font-medium">Gallery Management</span>
-                </NuxtLink>
-              </li>
-            </ul>
+            <button
+              @click="toggleSection('galleries')"
+              class="w-full flex items-center justify-between text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-widest px-3 py-3 mt-2 border-b border-gray-300 dark:border-gray-600 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+            >
+              <span class="flex items-center gap-2">
+                <GalleryVertical class="w-5 h-5" />
+                Galleries
+              </span>
+              <component :is="sectionState.galleries ? ChevronUp : ChevronDown" class="w-4 h-4 text-gray-600 dark:text-gray-400 transition-transform duration-200" />
+            </button>
+            <transition
+              enter-active-class="transition-all duration-200 ease-out"
+              enter-from-class="max-h-0 opacity-0"
+              enter-to-class="max-h-[300px] opacity-100"
+              leave-from-class="max-h-[300px] opacity-100"
+              leave-to-class="max-h-0 opacity-0"
+            >
+              <div
+                v-show="sectionState.galleries"
+                class="mt-1 ml-1 space-y-0.5 overflow-hidden"
+              >
+                <li>
+                  <NuxtLink
+                    to="/galleries"
+                    class="flex items-center gap-3 px-3 py-2 rounded-md transition-colors"
+                    active-class="bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                    inactive-class="text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                  >
+                    <ClipboardList class="w-4 h-4 opacity-80" />
+                    <span class="text-sm font-normal">Gallery Management</span>
+                  </NuxtLink>
+                </li>
+              </div>
+            </transition>
           </li>
-          <!-- Tags & Tagging section (authenticated users only) -->
+          <!-- Tags & Descriptions section (authenticated users only) -->
           <li v-if="isAuthenticated">
-            <div class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 px-3 mt-4">
-              Tags & Tagging
-            </div>
-            <ul class="space-y-1 ml-2 border-l border-gray-200 dark:border-gray-700 pl-4">
-              <li>
-                <NuxtLink
-                  to="/tags-and-tagging/scan-files"
-                  class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors"
-                  active-class="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                  inactive-class="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
-                  <span class="text-lg">🔍</span>
-                  <span class="font-medium">Scan Files</span>
-                </NuxtLink>
-              </li>
-              <li>
-                <NuxtLink
-                  to="/tags-and-tagging/tags"
-                  class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors"
-                  active-class="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                  inactive-class="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
-                  <span class="text-lg">🏷️</span>
-                  <span class="font-medium">Tags & Descriptions Generator</span>
-                </NuxtLink>
-              </li>
-              <li>
-                <NuxtLink
-                  to="/tags-and-tagging/review-data"
-                  class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors"
-                  active-class="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                  inactive-class="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
-                  <span class="text-lg">✅</span>
-                  <span class="font-medium">Review Data</span>
-                </NuxtLink>
-              </li>
-              <li>
-                <NuxtLink
-                  to="/tags-and-tagging/sync"
-                  class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors"
-                  active-class="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                  inactive-class="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
-                  <span class="text-lg">🔄</span>
-                  <span class="font-medium">Tags & Descriptions Manager
-                  </span>
-                </NuxtLink>
-              </li>
-            </ul>
+            <button
+              @click="toggleSection('tags')"
+              class="w-full flex items-center justify-between text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-widest px-3 py-3 mt-2 border-b border-gray-300 dark:border-gray-600 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+            >
+              <span class="flex items-center gap-2 text-left">
+                <Tag class="w-5 h-5" />
+                <span>Tags & Descriptions</span>
+              </span>
+              <component :is="sectionState.tags ? ChevronUp : ChevronDown" class="w-4 h-4 text-gray-600 dark:text-gray-400 transition-transform duration-200" />
+            </button>
+            <transition
+              enter-active-class="transition-all duration-200 ease-out"
+              enter-from-class="max-h-0 opacity-0"
+              enter-to-class="max-h-[500px] opacity-100"
+              leave-from-class="max-h-[500px] opacity-100"
+              leave-to-class="max-h-0 opacity-0"
+            >
+              <div
+                v-show="sectionState.tags"
+                class="mt-1 ml-1 space-y-0.5 overflow-hidden"
+              >
+                <li>
+                  <NuxtLink
+                    to="/tags-and-tagging/scan-files"
+                    class="flex items-center gap-3 px-3 py-2 rounded-md transition-colors"
+                    active-class="bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                    inactive-class="text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                  >
+                    <ScanLine class="w-4 h-4 opacity-80" />
+                    <span class="text-sm font-normal">Scan Files</span>
+                  </NuxtLink>
+                </li>
+                <li>
+                  <NuxtLink
+                    to="/tags-and-tagging/tags"
+                    class="flex items-center gap-3 px-3 py-2 rounded-md transition-colors"
+                    active-class="bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                    inactive-class="text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                  >
+                    <PenTool class="w-4 h-4 opacity-80" />
+                    <span class="text-sm font-normal">Tags & Descriptions Generator</span>
+                  </NuxtLink>
+                </li>
+                <li>
+                  <NuxtLink
+                    to="/tags-and-tagging/review-data"
+                    class="flex items-center gap-3 px-3 py-2 rounded-md transition-colors"
+                    active-class="bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                    inactive-class="text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                  >
+                    <CheckSquare class="w-4 h-4 opacity-80" />
+                    <span class="text-sm font-normal">Review Data</span>
+                  </NuxtLink>
+                </li>
+                <li>
+                  <NuxtLink
+                    to="/tags-and-tagging/sync"
+                    class="flex items-center gap-3 px-3 py-2 rounded-md transition-colors"
+                    active-class="bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                    inactive-class="text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                  >
+                    <RotateCw class="w-4 h-4 opacity-80" />
+                    <span class="text-sm font-normal">Tags & Descriptions Manager</span>
+                  </NuxtLink>
+                </li>
+              </div>
+            </transition>
           </li>
           <!-- App Settings (admin only) -->
           <li v-if="isAdmin">
-            <div class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-2 px-3 mt-4">
-              App Settings
-            </div>
-            <ul class="space-y-1 ml-2 border-l border-gray-200 dark:border-gray-700 pl-4">
-              <li>
-                <NuxtLink
-                  to="/settings/app/rag"
-                  class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors"
-                  active-class="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                  inactive-class="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
-                  <span class="text-lg">🧠</span>
-                  <span class="font-medium">RAG Search</span>
-                </NuxtLink>
-              </li>
-              <li>
-                <NuxtLink
-                  to="/settings/app/browse"
-                  class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors"
-                  active-class="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                  inactive-class="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
-                  <span class="text-lg">📂</span>
-                  <span class="font-medium">Browse</span>
-                </NuxtLink>
-              </li>
-              <li>
-                <NuxtLink
-                  to="/settings/app/user-management"
-                  class="flex items-center gap-3 px-3 py-2 rounded-lg transition-colors"
-                  active-class="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
-                  inactive-class="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
-                  <span class="text-lg">👥</span>
-                  <span class="font-medium">User Management</span>
-                </NuxtLink>
-              </li>
-            </ul>
+            <button
+              @click="toggleSection('settings')"
+              class="w-full flex items-center justify-between text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-widest px-3 py-3 mt-2 border-b border-gray-300 dark:border-gray-600 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+            >
+              <span class="flex items-center gap-2">
+                <Settings class="w-5 h-5" />
+                App Settings
+              </span>
+              <component :is="sectionState.settings ? ChevronUp : ChevronDown" class="w-4 h-4 text-gray-600 dark:text-gray-400 transition-transform duration-200" />
+            </button>
+            <transition
+              enter-active-class="transition-all duration-200 ease-out"
+              enter-from-class="max-h-0 opacity-0"
+              enter-to-class="max-h-[400px] opacity-100"
+              leave-from-class="max-h-[400px] opacity-100"
+              leave-to-class="max-h-0 opacity-0"
+            >
+              <div
+                v-show="sectionState.settings"
+                class="mt-1 ml-1 space-y-0.5 overflow-hidden"
+              >
+                <li>
+                  <NuxtLink
+                    to="/settings/app/rag"
+                    class="flex items-center gap-3 px-3 py-2 rounded-md transition-colors"
+                    active-class="bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                    inactive-class="text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                  >
+                    <Brain class="w-4 h-4 opacity-80" />
+                    <span class="text-sm font-normal">RAG Search</span>
+                  </NuxtLink>
+                </li>
+                <li>
+                  <NuxtLink
+                    to="/settings/app/browse"
+                    class="flex items-center gap-3 px-3 py-2 rounded-md transition-colors"
+                    active-class="bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                    inactive-class="text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                  >
+                    <FolderOpen class="w-4 h-4 opacity-80" />
+                    <span class="text-sm font-normal">Browse</span>
+                  </NuxtLink>
+                </li>
+                <li>
+                  <NuxtLink
+                    to="/settings/app/user-management"
+                    class="flex items-center gap-3 px-3 py-2 rounded-md transition-colors"
+                    active-class="bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                    inactive-class="text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                  >
+                    <Users class="w-4 h-4 opacity-80" />
+                    <span class="text-sm font-normal">User Management</span>
+                  </NuxtLink>
+                </li>
+              </div>
+            </transition>
           </li>
         </ul>
       </nav>
@@ -294,10 +428,53 @@ async function handleLogout() {
               v-show="showUserMenu"
               class="absolute bottom-full left-0 right-0 mb-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50"
             >
+              <!-- Theme Mode Selection -->
+              <div class="px-3 py-2 border-b border-gray-200 dark:border-gray-700">
+                <p class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Theme</p>
+                <div class="flex gap-1">
+                  <button
+                    @click="setThemeMode('light')"
+                    class="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded text-xs font-medium transition-colors"
+                    :class="theme === 'light'
+                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 border border-transparent'"
+                    title="Light mode"
+                    aria-label="Switch to light mode"
+                  >
+                    <Sun class="w-4 h-4" />
+                    <span>Light</span>
+                  </button>
+                  <button
+                    @click="setThemeMode('dark')"
+                    class="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded text-xs font-medium transition-colors"
+                    :class="theme === 'dark'
+                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 border border-transparent'"
+                    title="Dark mode"
+                    aria-label="Switch to dark mode"
+                  >
+                    <Moon class="w-4 h-4" />
+                    <span>Dark</span>
+                  </button>
+                  <button
+                    @click="setThemeMode('auto')"
+                    class="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 rounded text-xs font-medium transition-colors"
+                    :class="theme === 'auto'
+                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-300 dark:border-blue-700'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 border border-transparent'"
+                    title="Automatic (follow system)"
+                    aria-label="Switch to automatic theme mode"
+                  >
+                    <Monitor class="w-4 h-4" />
+                    <span>Auto</span>
+                  </button>
+                </div>
+              </div>
+              
               <!-- User Settings link -->
               <NuxtLink
                 to="/settings/user"
-                class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-t-lg transition-colors"
+                class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 @click="showUserMenu = false"
               >
                 <Settings class="w-4 h-4" />
@@ -307,7 +484,7 @@ async function handleLogout() {
               <!-- Logout button -->
               <button
                 @click="handleLogout"
-                class="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-b-lg transition-colors"
+                class="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
               >
                 <LogOut class="w-4 h-4" />
                 <span>Logout</span>
@@ -357,10 +534,10 @@ async function handleLogout() {
     </div>
 
     <!-- Main Content -->
-    <main class="flex-1 overflow-auto">
-     <div :class="theme === 'dark' ? 'dark bg-gray-900' : 'bg-gray-50'">
+    <main class="flex-1 overflow-y-auto">
+     <div class="bg-gray-50 dark:bg-gray-900">
        <slot />
-    </div>
-    </main>
+     </div>
+     </main>
   </div>
 </template>

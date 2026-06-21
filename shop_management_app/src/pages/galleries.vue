@@ -287,7 +287,7 @@ function closeAccessManagement() {
               <div class="flex-1 min-w-0">
                 <h3 class="font-medium truncate">{{ gallery.name }}</h3>
                 <p class="text-xs text-muted-foreground mt-1">
-                  {{ (gallery as GalleryDetail).images?.length || 0 }} images
+                  {{ (gallery as any).imageCount ?? ((gallery as GalleryDetail).images?.length || 0) }} images
                 </p>
               </div>
               <ChevronRight class="w-4 h-4 text-muted-foreground flex-shrink-0 ml-2" />

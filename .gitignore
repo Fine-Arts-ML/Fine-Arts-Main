@@ -12,6 +12,7 @@ py-code/web-page/streamlit_app/main.py
 ipynb-test-bench/fingerprinting/caffe_model/*
 ipynb-test-bench/image taging/live_pic/
 /plans/*
+skills/*
 py-code/shop_managment/utils/constants.py
 .roo/
 py-code/shop_managment/docker-compose.yml
@@ -35,3 +36,4 @@ shop_management_app/src/py-code/tag-service/tests/test_ocs_api.py
 docs
 .gitignore
 docs-tasks
+shop_management_app/package-lock.json

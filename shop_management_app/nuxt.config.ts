@@ -81,7 +81,7 @@ export default defineNuxtConfig({
       script: [
         {
           // Synchronous inline script to apply saved theme BEFORE Vue renders (prevents FOUC)
-          innerHTML: '(function(){try{var t=localStorage.getItem("theme")||"light";document.documentElement.classList.toggle("dark",t==="dark");document.documentElement.setAttribute("data-theme",t)}catch(e){}})();',
+          innerHTML: '(function(){try{var t=localStorage.getItem("theme")||"auto";var isDark=t==="auto"?window.matchMedia("(prefers-color-scheme: dark)").matches:t==="dark";document.documentElement.classList.toggle("dark",isDark);document.documentElement.setAttribute("data-theme",t)}catch(e){}})();',
           tagPosition: 'head',
           tagPriority: 'high',
         },

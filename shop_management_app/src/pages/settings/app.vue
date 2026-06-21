@@ -2,7 +2,7 @@
 import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuth } from '~/composables/useAuth'
-import { Lock, Settings2, Brain, FolderOpen, Users, Tag } from 'lucide-vue-next'
+import { Lock, Settings2, Brain, FolderOpen, Users } from 'lucide-vue-next'
 
 const route = useRoute()
 const router = useRouter()
@@ -33,11 +33,6 @@ const subMenus = [
     label: 'User Management',
     to: '/settings/app/user-management',
     icon: Users,
-  },
-  {
-    label: 'Tag Management',
-    to: '/settings/app/tag-management',
-    icon: Tag,
   },
 ]
 
