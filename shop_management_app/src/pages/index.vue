@@ -1,6 +1,8 @@
 <script setup lang="ts">
-// Redirect to shops page
-navigateTo('/shops')
+// The root route is no longer prerendered.
+// Auth-dependent redirects are handled by the global guest middleware (guest.global.ts).
+// The middleware will redirect guests to /guest and non-guests based on their role.
+// No client-side redirect logic needed here — the middleware handles it.
 </script>
 
 <template>

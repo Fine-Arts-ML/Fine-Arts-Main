@@ -2,7 +2,7 @@
 import { db } from '~/lib/db'
 import { galleryAccess, galleries } from '~/lib/gallery-schema'
 import { userAccounts } from '~/lib/auth-schema'
-import { eq } from 'drizzle-orm'
+import { eq, and } from 'drizzle-orm'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -58,8 +58,10 @@ export default defineEventHandler(async (event) => {
     // Check if access already exists
     const existing = await db.select()
       .from(galleryAccess)
-      .where(eq(galleryAccess.galleryId, galleryId))
-      .andWhere(eq(galleryAccess.guestUserId, guestUserId))
+      .where(and(
+        eq(galleryAccess.galleryId, galleryId),
+        eq(galleryAccess.guestUserId, guestUserId)
+      ))
       .limit(1)
 
     if (existing[0]) {
@@ -85,6 +87,10 @@ export default defineEventHandler(async (event) => {
   } catch (error: any) {
     if (error.statusCode) throw error
     console.error('[grant-gallery-access] Error:', error)
-    throw createError({ statusCode: 500, statusMessage: 'Failed to grant access' })
+    console.error('[grant-gallery-access] Error stack:', error.stack)
+    throw createError({
+      statusCode: 500,
+      statusMessage: error.message || 'Failed to grant access'
+    })
   }
 })

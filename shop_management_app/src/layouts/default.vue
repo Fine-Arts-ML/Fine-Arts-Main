@@ -7,14 +7,44 @@ import {
   Building2, Store, Folder, Link, BarChart3,
   GalleryVertical, ClipboardList, Tag, ScanLine,
   PenTool, CheckSquare, RotateCw, Brain, FolderOpen, Users,
+  // Guest sidebar icons
+  Loader2, EyeOff,
 } from 'lucide-vue-next'
 import { useTheme } from '~/composables/useTheme'
 import { useAuth } from '~/composables/useAuth'
 import { useRoute } from 'vue-router'
 
 const { theme, applyTheme, getResolvedTheme } = useTheme()
-const { user, logout, isAuthenticated, isAdmin } = useAuth()
+const { user, logout, isAuthenticated, isAdmin, isGuest } = useAuth()
 const route = useRoute()
+
+// Guest gallery data (only loaded when user is guest)
+const guestGalleries = ref<Array<{ id: number; name: string; imageCount?: number }>>([])
+const guestGalleriesLoading = ref(false)
+
+async function fetchGuestGalleries() {
+  if (!isGuest.value) return
+  guestGalleriesLoading.value = true
+  try {
+    const galleries = await $fetch<any[]>('/api/galleries/my')
+    guestGalleries.value = galleries.map((g: any) => ({
+      id: g.id,
+      name: g.name,
+      imageCount: g.imageCount,
+    }))
+  } catch (e) {
+    console.error('[sidebar] Failed to fetch guest galleries:', e)
+  } finally {
+    guestGalleriesLoading.value = false
+  }
+}
+
+// Watch for guest role changes and fetch galleries
+watch(isGuest, (newIsGuest) => {
+  if (newIsGuest) {
+    fetchGuestGalleries()
+  }
+})
 
 // Section expand/collapse state — all collapsed by default
 const sectionState = ref<Record<string, boolean>>({
@@ -61,6 +91,11 @@ onMounted(() => {
 
   // Auto-expand section based on current route
   autoExpandSection()
+
+  // Fetch guest galleries if user is a guest (for guests already logged in on mount)
+  if (isGuest.value) {
+    fetchGuestGalleries()
+  }
 })
 
 // Watch for route changes and auto-expand relevant section
@@ -157,8 +192,8 @@ async function handleLogout() {
       <!-- Navigation -->
       <nav class="flex-1 p-4 overflow-y-auto">
         <ul class="space-y-2">
-          <!-- Shops & Files section -->
-          <li>
+          <!-- Shops & Files section (hidden for guests) -->
+          <li v-if="!isGuest">
             <button
               @click="toggleSection('shopsFiles')"
               class="w-full flex items-center justify-between text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-widest px-3 py-3 mt-2 border-b border-gray-300 dark:border-gray-600"
@@ -229,43 +264,82 @@ async function handleLogout() {
           </li>
           <!-- Galleries section (authenticated users only) -->
           <li v-if="isAuthenticated">
-            <button
-              @click="toggleSection('galleries')"
-              class="w-full flex items-center justify-between text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-widest px-3 py-3 mt-2 border-b border-gray-300 dark:border-gray-600 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
-            >
-              <span class="flex items-center gap-2">
-                <GalleryVertical class="w-5 h-5" />
-                Galleries
-              </span>
-              <component :is="sectionState.galleries ? ChevronUp : ChevronDown" class="w-4 h-4 text-gray-600 dark:text-gray-400 transition-transform duration-200" />
-            </button>
-            <transition
-              enter-active-class="transition-all duration-200 ease-out"
-              enter-from-class="max-h-0 opacity-0"
-              enter-to-class="max-h-[300px] opacity-100"
-              leave-from-class="max-h-[300px] opacity-100"
-              leave-to-class="max-h-0 opacity-0"
-            >
-              <div
-                v-show="sectionState.galleries"
-                class="mt-1 ml-1 space-y-0.5 overflow-hidden"
+            <!-- For guests: show individual gallery links -->
+            <template v-if="isGuest">
+              <li class="px-3 py-2 mt-1">
+                <div class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-2">My Galleries</div>
+              </li>
+              <li v-if="guestGalleriesLoading">
+                <div class="flex items-center gap-3 px-3 py-2 text-gray-600 dark:text-gray-400">
+                  <Loader2 class="w-4 h-4 animate-spin" />
+                  <span class="text-sm font-normal">Loading...</span>
+                </div>
+              </li>
+              <li v-else-if="guestGalleries.length === 0">
+                <div class="flex items-center gap-3 px-3 py-2 text-gray-500 dark:text-gray-400">
+                  <EyeOff class="w-4 h-4 opacity-80" />
+                  <span class="text-sm font-normal">No galleries available</span>
+                </div>
+              </li>
+              <li v-else>
+                <NuxtLink
+                  v-for="gallery in guestGalleries"
+                  :key="gallery.id"
+                  :to="`/gallery/${gallery.id}`"
+                  class="flex items-center justify-between gap-2 px-3 py-2 rounded-md transition-colors"
+                  active-class="bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                  inactive-class="text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                >
+                  <div class="flex items-center gap-3 min-w-0">
+                    <ClipboardList class="w-4 h-4 opacity-80 flex-shrink-0" />
+                    <span class="text-sm font-normal truncate">{{ gallery.name }}</span>
+                  </div>
+                  <span v-if="gallery.imageCount" class="text-xs text-gray-400 dark:text-gray-500 flex-shrink-0">
+                    {{ gallery.imageCount }}
+                  </span>
+                </NuxtLink>
+              </li>
+            </template>
+            <!-- For non-guests: show original galleries section -->
+            <template v-else>
+              <button
+                @click="toggleSection('galleries')"
+                class="w-full flex items-center justify-between text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-widest px-3 py-3 mt-2 border-b border-gray-300 dark:border-gray-600 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
               >
-                <li>
-                  <NuxtLink
-                    to="/galleries"
-                    class="flex items-center gap-3 px-3 py-2 rounded-md transition-colors"
-                    active-class="bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
-                    inactive-class="text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50"
-                  >
-                    <ClipboardList class="w-4 h-4 opacity-80" />
-                    <span class="text-sm font-normal">Gallery Management</span>
-                  </NuxtLink>
-                </li>
-              </div>
-            </transition>
+                <span class="flex items-center gap-2">
+                  <GalleryVertical class="w-5 h-5" />
+                  Galleries
+                </span>
+                <component :is="sectionState.galleries ? ChevronUp : ChevronDown" class="w-4 h-4 text-gray-600 dark:text-gray-400 transition-transform duration-200" />
+              </button>
+              <transition
+                enter-active-class="transition-all duration-200 ease-out"
+                enter-from-class="max-h-0 opacity-0"
+                enter-to-class="max-h-[300px] opacity-100"
+                leave-from-class="max-h-[300px] opacity-100"
+                leave-to-class="max-h-0 opacity-0"
+              >
+                <div
+                  v-show="sectionState.galleries"
+                  class="mt-1 ml-1 space-y-0.5 overflow-hidden"
+                >
+                  <li>
+                    <NuxtLink
+                      to="/galleries"
+                      class="flex items-center gap-3 px-3 py-2 rounded-md transition-colors"
+                      active-class="bg-blue-100 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300"
+                      inactive-class="text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50"
+                    >
+                      <ClipboardList class="w-4 h-4 opacity-80" />
+                      <span class="text-sm font-normal">Gallery Management</span>
+                    </NuxtLink>
+                  </li>
+                </div>
+              </transition>
+            </template>
           </li>
-          <!-- Tags & Descriptions section (authenticated users only) -->
-          <li v-if="isAuthenticated">
+          <!-- Tags & Descriptions section (hidden for guests) -->
+          <li v-if="isAuthenticated && !isGuest">
             <button
               @click="toggleSection('tags')"
               class="w-full flex items-center justify-between text-sm font-bold text-gray-800 dark:text-gray-200 uppercase tracking-widest px-3 py-3 mt-2 border-b border-gray-300 dark:border-gray-600 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
@@ -471,8 +545,9 @@ async function handleLogout() {
                 </div>
               </div>
               
-              <!-- User Settings link -->
+              <!-- User Settings link (hidden for guests) -->
               <NuxtLink
+                v-if="!isGuest"
                 to="/settings/user"
                 class="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                 @click="showUserMenu = false"

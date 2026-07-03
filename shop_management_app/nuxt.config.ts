@@ -68,7 +68,7 @@ export default defineNuxtConfig({
   },
 
   routeRules: {
-    '/': { prerender: true },
+    // No prerender for root - auth-dependent redirect needed
   },
 
   app: {

@@ -4,8 +4,11 @@ import {
   Search, X, UserPlus, UserX, Loader2, Users,
   CheckCircle2, Circle,
 } from 'lucide-vue-next'
+import { useAuth } from '~/composables/useAuth'
 import Button from '../ui/Button.vue'
 import Input from '../ui/Input.vue'
+
+const { user: currentUser } = useAuth()
 
 interface Props {
   galleryId: number
@@ -94,8 +97,7 @@ async function grantAccess(userId: number) {
   
   grantLoading.value = true
   try {
-    const userSession = useSessionStorage('user')
-    const currentUserId = userSession.value?.id
+    const currentUserId = currentUser.value?.id
     
     const result = await $fetch(`/api/galleries/${props.galleryId}/access`, {
       method: 'POST',

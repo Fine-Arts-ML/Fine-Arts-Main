@@ -11,8 +11,8 @@ export default defineNuxtRouteMiddleware((to, from) => {
     return navigateTo('/login')
   }
   
-  // Guests should not access this section
+  // Guests should not access this section - redirect to guest portal
   if (user.value?.role === 'guest') {
-    return navigateTo('/files')
+    return navigateTo('/guest')
   }
 })

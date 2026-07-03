@@ -1,14 +1,17 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useAuth } from '~/composables/useAuth'
 import { LogIn, AlertCircle, Loader2 } from 'lucide-vue-next'
 
-const { login } = useAuth()
+const { login, isAuthenticated, user } = useAuth()
 
 const username = ref('')
 const password = ref('')
 const isLoading = ref(false)
 const error = ref<string | null>(null)
+
+// Redirect if already authenticated
+const isLoggedIn = computed(() => isAuthenticated.value)
 
 async function handleLogin() {
   isLoading.value = true
@@ -16,18 +19,17 @@ async function handleLogin() {
 
   try {
     await login(username.value, password.value)
-    navigateTo('/shops')
+    // Redirect based on role
+    if (user.value?.role === 'guest') {
+      navigateTo('/guest')
+    } else {
+      navigateTo('/shops')
+    }
   } catch (e: any) {
     error.value = e?.data?.statusMessage || e?.statusMessage || 'Login failed. Please check your credentials.'
   } finally {
     isLoading.value = false
   }
-}
-
-// Redirect if already authenticated
-const { isAuthenticated } = useAuth()
-if (isAuthenticated.value) {
-  navigateTo('/shops')
 }
 
 definePageMeta({

@@ -1,7 +1,7 @@
 // Get galleries accessible to current user (for guests)
 import { db } from '~/lib/db'
-import { galleries, galleryAccess } from '~/lib/gallery-schema'
-import { eq, and, asc } from 'drizzle-orm'
+import { galleries, galleryAccess, galleryImages } from '~/lib/gallery-schema'
+import { eq, and, asc, inArray, sql } from 'drizzle-orm'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -9,8 +9,6 @@ export default defineEventHandler(async (event) => {
     if (!user) {
       throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
     }
-
-    const galleryId = parseInt(getRouterParam(event, 'id') || '0', 10)
 
     // Guests get their accessible galleries
     if (user.role === 'guest') {
@@ -31,6 +29,23 @@ export default defineEventHandler(async (event) => {
         ))
         .orderBy(asc(galleries.name))
 
+      // Fetch image counts for these galleries using inArray for proper parameterization
+      const galleryIds = accessibleGalleries.map((g: any) => g.id)
+      const imageCountMap = new Map<number, number>()
+
+      if (galleryIds.length > 0) {
+        const imageCountsResult = await db.select({
+          galleryId: galleryImages.galleryId,
+          count: sql<number>`COUNT(*)`.mapWith(Number),
+        }).from(galleryImages)
+          .where(inArray(galleryImages.galleryId, galleryIds))
+          .groupBy(galleryImages.galleryId)
+
+        for (const row of imageCountsResult) {
+          imageCountMap.set(row.galleryId, row.count)
+        }
+      }
+
       return accessibleGalleries.map(g => ({
         id: g.id,
         name: g.name,
@@ -40,6 +55,7 @@ export default defineEventHandler(async (event) => {
         isActive: g.isActive,
         createdAt: g.createdAt.toISOString(),
         updatedAt: g.updatedAt.toISOString(),
+        imageCount: imageCountMap.get(g.id) ?? 0,
       }))
     }
 
@@ -57,6 +73,23 @@ export default defineEventHandler(async (event) => {
       .where(eq(galleries.isActive, true))
       .orderBy(asc(galleries.name))
 
+    // Fetch image counts for all active galleries
+    const galleryIds = activeGalleries.map((g: any) => g.id)
+    const imageCountMap = new Map<number, number>()
+
+    if (galleryIds.length > 0) {
+      const imageCountsResult = await db.select({
+        galleryId: galleryImages.galleryId,
+        count: sql<number>`COUNT(*)`.mapWith(Number),
+      }).from(galleryImages)
+        .where(inArray(galleryImages.galleryId, galleryIds))
+        .groupBy(galleryImages.galleryId)
+
+      for (const row of imageCountsResult) {
+        imageCountMap.set(row.galleryId, row.count)
+      }
+    }
+
     return activeGalleries.map(g => ({
       id: g.id,
       name: g.name,
@@ -66,6 +99,7 @@ export default defineEventHandler(async (event) => {
       isActive: g.isActive,
       createdAt: g.createdAt.toISOString(),
       updatedAt: g.updatedAt.toISOString(),
+      imageCount: imageCountMap.get(g.id) ?? 0,
     }))
   } catch (error: any) {
     if (error.statusCode) throw error

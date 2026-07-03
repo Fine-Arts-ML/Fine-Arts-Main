@@ -1,6 +1,7 @@
 // Gallery Access Composable
 // Provides access management operations for a specific gallery
 import type { GalleryAccessEntry } from './useGalleries'
+import { useAuth } from './useAuth'
 
 export function useGalleryAccess(galleryId: Ref<number>) {
   const accessList = ref<GalleryAccessEntry[]>([])
@@ -28,8 +29,8 @@ export function useGalleryAccess(galleryId: Ref<number>) {
     loading.value = true
     error.value = null
     try {
-      // Get current user ID from session
-      const user = useSessionStorage('user')
+      // Get current user ID from auth composable
+      const { user } = useAuth()
       const userId = user.value?.id
 
       const response = await $fetch<GalleryAccessEntry>(`/api/galleries/${galleryId.value}/access`, {

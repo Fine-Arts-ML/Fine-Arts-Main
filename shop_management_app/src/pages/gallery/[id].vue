@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
+import { useAuth } from '~/composables/useAuth'
 import {
   ChevronLeft,
   ChevronRight,
@@ -9,6 +10,9 @@ import {
   Loader2,
   ArrowLeft,
 } from 'lucide-vue-next'
+
+// Auth
+const { isGuest } = useAuth()
 
 // Route param
 const route = useRoute()
@@ -140,7 +144,8 @@ function formatDate(dateStr: string): string {
       <div class="px-6 py-4">
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-4">
-            <NuxtLink to="/galleries" class="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
+            <!-- "Back to Galleries" link — hidden for guests (they use sidebar navigation) -->
+            <NuxtLink v-if="!isGuest" to="/galleries" class="flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors">
               <ArrowLeft class="w-4 h-4" />
               <span>Back to Galleries</span>
             </NuxtLink>
