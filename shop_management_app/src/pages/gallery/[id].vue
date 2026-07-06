@@ -186,27 +186,27 @@ function formatDate(dateStr: string): string {
           <div
             v-for="(image, index) in images"
             :key="image.id"
-            class="group cursor-pointer rounded-xl overflow-hidden bg-card border shadow-sm hover:shadow-md transition-shadow"
+            class="group cursor-pointer rounded-xl overflow-hidden bg-card border shadow-sm hover:shadow-md transition-shadow flex flex-col"
             @click="openImage(index)"
           >
-            <div class="aspect-square overflow-hidden">
+            <div class="aspect-square overflow-hidden flex-shrink-0">
               <img
                 :src="getPreviewUrl(image.fileId, 512)"
                 :alt="image.caption || image.fileName || ''"
                 class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
               />
             </div>
-            <div class="p-4">
+            <div class="p-4 flex flex-col flex-1">
               <h3 v-if="image.fileName" class="font-medium truncate text-sm">
                 {{ image.fileName }}
               </h3>
-              <p v-if="image.caption" class="text-sm text-muted-foreground mt-1 line-clamp-2">
+              <p v-if="image.caption" class="text-sm text-muted-foreground mt-1">
                 "{{ image.caption }}"
               </p>
-              <p v-else-if="image.description" class="text-sm text-muted-foreground mt-1 line-clamp-2">
+              <p v-else-if="image.description" class="text-sm text-muted-foreground mt-1">
                 "{{ image.description }}"
               </p>
-              <p v-else class="text-sm text-muted-foreground mt-1 line-clamp-1">
+              <p v-else class="text-sm text-muted-foreground mt-1">
                 No description available
               </p>
             </div>
