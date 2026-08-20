@@ -1,12 +1,23 @@
 // Gallery Composable
 // Provides gallery CRUD operations and state management
 
+export interface GalleryImageCaption {
+  id: number
+  galleryImageId: number
+  captionId: number
+  caption: string
+  isMain: boolean
+  source: 'shop' | 'gallery'
+  createdById: number
+  createdAt: string
+}
+
 export interface GalleryImage {
   id: number
   galleryId: number
   fileId: number
   displayOrder: number
-  caption: string | null
+  captions: GalleryImageCaption[]
   addedById: number
   addedAt: string
   fileName?: string

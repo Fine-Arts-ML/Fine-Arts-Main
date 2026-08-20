@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue'
 import {
-  Search, X, Plus, Image as ImageIcon, Loader2,
+  Search, X, Plus, Image as ImageIcon, Loader2, Pencil,
   ChevronRight, Folder, FolderOpen,
   ArrowUp, ArrowDown, ArrowLeftRight,
 } from 'lucide-vue-next'
@@ -9,8 +9,9 @@ import Button from '../ui/Button.vue'
 import Input from '../ui/Input.vue'
 import ImagePreviewModal from '../ImagePreviewModal.vue'
 import FileBrowserTree, { type AccessibleFolder } from '../FileBrowserTree.vue'
+import CaptionSelectorPanel from './CaptionSelectorPanel.vue'
 import { useImagePreview } from '~/composables/useImagePreview'
-import type { GalleryImage } from '~/composables/useGalleries'
+import type { GalleryImage, GalleryImageCaption } from '~/composables/useGalleries'
 
 interface Props {
   galleryId: number
@@ -25,6 +26,33 @@ const emit = defineEmits<{
 }>()
 
 const { state: previewState, open: openPreview, close: closePreview } = useImagePreview()
+
+// Caption Selector Panel state
+const showCaptionSelector = ref(false)
+const selectedCaptionImage = ref<{
+  imageId: number
+  fileId: number
+  fileName: string
+  captions: GalleryImageCaption[]
+} | null>(null)
+
+function openCaptionSelector(image: GalleryImage) {
+  selectedCaptionImage.value = {
+    imageId: image.id,
+    fileId: image.fileId,
+    fileName: image.fileName || `File ${image.fileId}`,
+    captions: image.captions || [],
+  }
+  showCaptionSelector.value = true
+}
+
+function handleCaptionsUpdate(captions: GalleryImageCaption[]) {
+  if (!selectedCaptionImage.value) return
+  const img = galleryImages.value.find((i: any) => i.id === selectedCaptionImage.value!.imageId)
+  if (img) {
+    img.captions = captions
+  }
+}
 
 // View mode: 'tree' or 'cards'
 const viewMode = ref<'tree' | 'cards'>('tree')
@@ -190,21 +218,43 @@ async function removeImage(imageId: number) {
   }
 }
 
-// Update caption
-async function updateCaption(imageId: number) {
+// Add a new caption to an image
+async function addCaption(imageId: number) {
   const caption = captionEdits.value[imageId]
-  if (caption === undefined) return
+  if (!caption || caption.trim() === '') return
   
   try {
-    await $fetch(`/api/galleries/${props.galleryId}/images/${imageId}`, {
-      method: 'PUT',
-      body: { caption },
+    const result = await $fetch<Array<{
+      captionId: number; galleryImageId: number; caption: string;
+      createdById: number; createdAt: string; updatedAt: string;
+    }>>(`/api/galleries/${props.galleryId}/images/${imageId}/captions`, {
+      method: 'POST',
+      body: { caption: caption.trim() },
     })
     
-    const img = galleryImages.value.find(img => img.id === imageId)
-    if (img) img.caption = caption
+    const img = galleryImages.value.find((img: any) => img.id === imageId)
+    if (img) {
+      img.captions = (img.captions || []).concat(result)
+    }
+    captionEdits.value = {}
   } catch (e: any) {
-    alert(e.message || 'Failed to update caption')
+    alert(e.message || 'Failed to add caption')
+  }
+}
+
+// Delete a caption from an image
+async function deleteCaption(imageId: number, captionId: number) {
+  try {
+    await $fetch(`/api/galleries/${props.galleryId}/images/${imageId}/captions/${captionId}`, {
+      method: 'DELETE',
+    })
+    
+    const img = galleryImages.value.find((img: any) => img.id === imageId)
+    if (img) {
+      img.captions = img.captions.filter((c: any) => c.captionId !== captionId)
+    }
+  } catch (e: any) {
+    alert(e.message || 'Failed to delete caption')
   }
 }
 
@@ -479,23 +529,47 @@ function handleClose() {
                 </button>
               </div>
 
-              <!-- Thumbnail -->
-              <img
-                :src="getPreviewUrl(image.fileId, 64)"
-                :alt="image.caption || image.fileName || ''"
-                class="w-12 h-12 rounded object-cover cursor-pointer"
-                @click="showPreview(image.fileId, image.fileName || '')"
-              />
+              <!-- Thumbnail with caption editor button -->
+              <div class="relative">
+                <img
+                  :src="getPreviewUrl(image.fileId, 64)"
+                  :alt="image.captions?.[0]?.caption || image.fileName || ''"
+                  class="w-12 h-12 rounded object-cover cursor-pointer"
+                  @click="showPreview(image.fileId, image.fileName || '')"
+                />
+                <button
+                  class="absolute -top-1 -right-1 p-1 rounded-full bg-primary text-primary-foreground opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                  @click.stop="openCaptionSelector(image)"
+                  title="Edit captions"
+                >
+                  <Pencil class="w-3 h-3" />
+                </button>
+              </div>
 
               <!-- Info -->
               <div class="flex-1 min-w-0">
                 <p class="text-sm font-medium truncate">{{ image.fileName || `File ${image.fileId}` }}</p>
+                
+                <!-- Display existing captions -->
+                <div v-if="image.captions?.length" class="mt-1 space-y-1">
+                  <div v-for="cap in image.captions" :key="cap.captionId" class="flex items-center gap-1">
+                    <span class="text-xs text-muted-foreground">{{ cap.caption }}</span>
+                    <button
+                      class="text-xs text-destructive hover:text-destructive/80"
+                      @click="deleteCaption(image.id, cap.captionId)"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+                
+                <!-- Add new caption input -->
                 <input
                   v-model="captionEdits[image.id]"
-                  :placeholder="image.caption || 'Add caption...'"
+                  placeholder="Add caption..."
                   class="w-full text-xs mt-1 px-2 py-1 rounded border bg-transparent hover:border-input focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
-                  @blur="updateCaption(image.id)"
-                  @keyup.enter="updateCaption(image.id)"
+                  @blur="addCaption(image.id)"
+                  @keyup.enter="addCaption(image.id)"
                 />
               </div>
 
@@ -526,5 +600,16 @@ function handleClose() {
 
     <!-- Image Preview Modal -->
     <ImagePreviewModal :state="previewState" :close="closePreview" :navigate="() => {}" />
+
+    <!-- Caption Selector Panel -->
+    <CaptionSelectorPanel
+      v-if="selectedCaptionImage && showCaptionSelector"
+      :gallery-id="galleryId"
+      :image-id="selectedCaptionImage.imageId"
+      :file-id="selectedCaptionImage.fileId"
+      :current-captions="selectedCaptionImage.captions"
+      @close="showCaptionSelector = false"
+      @update:captions="handleCaptionsUpdate"
+    />
   </div>
 </template>

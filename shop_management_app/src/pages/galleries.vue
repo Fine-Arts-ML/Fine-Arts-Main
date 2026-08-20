@@ -32,6 +32,7 @@ import DialogDescription from '~/components/ui/DialogDescription.vue'
 import DialogFooter from '~/components/ui/DialogFooter.vue'
 import ImageAssignmentPanel from '~/components/gallery/ImageAssignmentPanel.vue'
 import AccessManagementPanel from '~/components/gallery/AccessManagementPanel.vue'
+import CaptionSelectorPanel from '~/components/gallery/CaptionSelectorPanel.vue'
 
 // Router for navigation
 const router = useRouter()
@@ -78,6 +79,16 @@ const galleryImagesForPanel = ref<GalleryImage[]>([])
 // Access management panel
 const showAccessManagement = ref(false)
 const galleryAccessForPanel = ref<GalleryAccessEntry[]>([])
+
+// Caption selector panel
+const showCaptionSelector = ref(false)
+const selectedCaptionImage = ref<{
+  galleryId: number
+  imageId: number
+  fileId: number
+  fileName: string
+  captions: any[]
+} | null>(null)
 
 // Load galleries on mount
 onMounted(async () => {
@@ -190,6 +201,25 @@ function formatDate(dateStr: string): string {
   return `${diffDays} days ago`
 }
 
+// --- Spoiler State for Description Boxes ---
+const expandedSpoilers = ref<Set<number>>(new Set())
+
+function toggleImageSpoiler(imageId: number) {
+  if (expandedSpoilers.value.has(imageId)) {
+    expandedSpoilers.value.delete(imageId)
+  } else {
+    expandedSpoilers.value.add(imageId)
+  }
+  expandedSpoilers.value = new Set(expandedSpoilers.value)
+}
+
+// Get main caption (isMain: true) for an image, fallback to first caption
+function getImageMainCaption(captions: any[]): string | null {
+  if (!captions?.length) return null
+  const main = captions.find((c: any) => c.isMain)
+  return main?.caption || (captions[0]?.caption || null)
+}
+
 // Image assignment panel handlers
 function openImageAssignment() {
   if (selectedGalleryDetail.value) {
@@ -213,6 +243,32 @@ function openAccessManagement() {
     galleryAccessForPanel.value = selectedGalleryDetail.value.access || []
   }
   showAccessManagement.value = true
+}
+
+// Caption selector panel handlers
+function openCaptionSelector(image: GalleryImage) {
+  if (!selectedGalleryId.value) return
+  selectedCaptionImage.value = {
+    galleryId: selectedGalleryId.value,
+    imageId: image.id,
+    fileId: image.fileId,
+    fileName: image.fileName || `File ${image.fileId}`,
+    captions: image.captions || [],
+  }
+  showCaptionSelector.value = true
+}
+
+function handleCaptionsUpdate(captions: any[]) {
+  if (!selectedCaptionImage.value) return
+  const img = (selectedGalleryDetail.value?.images || []).find((i: any) => i.id === selectedCaptionImage.value!.imageId)
+  if (img) {
+    img.captions = captions
+  }
+}
+
+function closeCaptionSelector() {
+  showCaptionSelector.value = false
+  selectedCaptionImage.value = null
 }
 
 function onUpdateAccess(access: GalleryAccessEntry[]) {
@@ -350,28 +406,60 @@ function closeAccessManagement() {
             </Button>
           </div>
 
-          <!-- Gallery Images Grid -->
-          <div v-if="selectedGalleryDetail?.images?.length" class="grid grid-cols-4 gap-4">
+          <!-- Gallery Images Grid (CSS Columns for masonry layout) -->
+          <div v-if="selectedGalleryDetail?.images?.length" class="columns-4 gap-4 space-y-4">
             <div
               v-for="image in selectedGalleryDetail.images"
               :key="image.id"
-              class="relative group aspect-square rounded-lg overflow-hidden bg-muted/30 border"
+              class="relative group rounded-lg overflow-hidden bg-muted/30 border flex flex-col break-inside-avoid transition-all"
             >
-              <img
-                :src="getPreviewUrl(image.fileId, 300)"
-                :alt="image.caption || image.fileName || ''"
-                class="w-full h-full object-cover"
-              />
-              <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                <Button size="sm" variant="secondary">
-                  <Pencil class="w-3 h-3" />
-                </Button>
-                <Button size="sm" variant="secondary" @click="handleDeleteImage(image.id)">
-                  <Trash2 class="w-3 h-3" />
-                </Button>
+              <!-- Image Container -->
+              <div class="relative aspect-square">
+                <img
+                  :src="getPreviewUrl(image.fileId, 300)"
+                  :alt="image.fileName || ''"
+                  class="w-full h-full object-cover"
+                />
+                <!-- Hover Overlay -->
+                <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                  <Button size="sm" variant="secondary" @click.stop="openCaptionSelector(image)">
+                    <Pencil class="w-3 h-3" />
+                  </Button>
+                  <Button size="sm" variant="secondary" @click.stop="handleDeleteImage(image.id)">
+                    <Trash2 class="w-3 h-3" />
+                  </Button>
+                </div>
+                <!-- Caption overlay (existing, keep for reference) -->
+                <div v-if="getImageMainCaption(image.captions)" class="absolute bottom-0 left-0 right-0 p-2 bg-black/60 text-white text-xs truncate">
+                  {{ getImageMainCaption(image.captions) }}
+                </div>
               </div>
-              <div v-if="image.caption" class="absolute bottom-0 left-0 right-0 p-2 bg-black/60 text-white text-xs truncate">
-                {{ image.caption }}
+              
+              <!-- Description Spoiler (below image) -->
+              <div
+                class="px-2 py-1.5 border-t cursor-pointer transition-colors"
+                :class="image.description ? 'hover:bg-muted/30' : 'bg-destructive/5'"
+                @click="toggleImageSpoiler(image.id)"
+              >
+                <div class="flex items-start gap-1.5">
+                  <div class="flex-1 min-w-0">
+                    <p
+                      v-if="image.description"
+                      class="text-xs text-muted-foreground whitespace-pre-wrap"
+                      :class="expandedSpoilers.has(image.id) ? 'max-h-[1000px] line-clamp-0' : 'max-h-[60px] overflow-hidden'"
+                    >
+                      {{ image.description }}
+                    </p>
+                    <p v-else class="text-[11px] text-destructive/70 italic">No description</p>
+                  </div>
+                  <button
+                    v-if="image.description && image.description.length > 80"
+                    class="text-[10px] text-muted-foreground hover:text-foreground flex-shrink-0 mt-0"
+                    @click.stop="toggleImageSpoiler(image.id)"
+                  >
+                    {{ expandedSpoilers.has(image.id) ? '▲' : '▼' }}
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -483,6 +571,21 @@ function closeAccessManagement() {
           :current-access="galleryAccessForPanel"
           @update:access="onUpdateAccess"
           @close="closeAccessManagement"
+        />
+      </DialogContent>
+    </Dialog>
+
+    <!-- Caption Selector Panel Dialog -->
+    <Dialog v-model:open="showCaptionSelector">
+      <DialogContent class="max-w-2xl max-h-[85vh] p-0" :open="showCaptionSelector">
+        <CaptionSelectorPanel
+          v-if="showCaptionSelector && selectedCaptionImage"
+          :gallery-id="selectedCaptionImage.galleryId"
+          :image-id="selectedCaptionImage.imageId"
+          :file-id="selectedCaptionImage.fileId"
+          :current-captions="selectedCaptionImage.captions"
+          @close="closeCaptionSelector"
+          @update:captions="handleCaptionsUpdate"
         />
       </DialogContent>
     </Dialog>

@@ -1,6 +1,6 @@
 // Gallery Images Composable
 // Provides image management operations for a specific gallery
-import type { GalleryImage, GalleryAccessEntry } from './useGalleries'
+import type { GalleryImage, GalleryImageCaption, GalleryAccessEntry } from './useGalleries'
 
 export function useGalleryImages(galleryId: Ref<number>) {
   const images = ref<GalleryImage[]>([])
@@ -24,13 +24,13 @@ export function useGalleryImages(galleryId: Ref<number>) {
   }
 
   // Add image(s) to gallery
-  async function addImages(fileIds: number[], caption?: string): Promise<GalleryImage[]> {
+  async function addImages(fileIds: number[]): Promise<GalleryImage[]> {
     loading.value = true
     error.value = null
     try {
       const response = await $fetch<GalleryImage[]>(`/api/galleries/${galleryId.value}/images`, {
         method: 'POST',
-        body: { fileIds, caption },
+        body: { fileIds },
       })
       images.value.push(...response)
       return response
@@ -82,21 +82,87 @@ export function useGalleryImages(galleryId: Ref<number>) {
     }
   }
 
-  // Update image caption
-  async function updateCaption(imageId: number, caption: string): Promise<void> {
+  // Add caption to image
+  async function addCaption(imageId: number, caption: string): Promise<GalleryImageCaption> {
     loading.value = true
     error.value = null
     try {
-      await $fetch(`/api/galleries/${galleryId.value}/images/${imageId}`, {
+      const result = await $fetch<GalleryImageCaption>(`/api/galleries/${galleryId.value}/images/${imageId}/captions`, {
+        method: 'POST',
+        body: { caption },
+      })
+      // Update the image's captions
+      const image = images.value.find((img: GalleryImage) => img.id === imageId)
+      if (image) {
+        image.captions.push(result)
+      }
+      return result
+    } catch (e: any) {
+      error.value = e.message || 'Failed to add caption'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // Update caption
+  async function updateCaption(imageId: number, captionId: number, caption: string): Promise<void> {
+    loading.value = true
+    error.value = null
+    try {
+      await $fetch(`/api/galleries/${galleryId.value}/images/${imageId}/captions/${captionId}`, {
         method: 'PUT',
         body: { caption },
       })
+      // Update the image's captions locally
       const image = images.value.find((img: GalleryImage) => img.id === imageId)
       if (image) {
-        image.caption = caption
+        const c = image.captions.find((c: GalleryImageCaption) => c.captionId === captionId)
+        if (c) {
+          c.caption = caption
+          c.updatedAt = new Date().toISOString()
+        }
       }
     } catch (e: any) {
       error.value = e.message || 'Failed to update caption'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // Delete caption
+  async function deleteCaption(captionId: number): Promise<void> {
+    loading.value = true
+    error.value = null
+    try {
+      await $fetch(`/api/galleries/${galleryId.value}/images/${captionId}/captions`, {
+        method: 'DELETE',
+      })
+      // Update the image's captions
+      for (const image of images.value) {
+        const idx = image.captions.findIndex((c: GalleryImageCaption) => c.captionId === captionId)
+        if (idx !== -1) {
+          image.captions.splice(idx, 1)
+          break
+        }
+      }
+    } catch (e: any) {
+      error.value = e.message || 'Failed to delete caption'
+      throw e
+    } finally {
+      loading.value = false
+    }
+  }
+
+  // Get captions for an image
+  async function getCaptions(imageId: number): Promise<GalleryImageCaption[]> {
+    loading.value = true
+    error.value = null
+    try {
+      return await $fetch<GalleryImageCaption[]>(`/api/galleries/${galleryId.value}/images/${imageId}/captions`)
+    } catch (e: any) {
+      error.value = e.message || 'Failed to fetch captions'
       throw e
     } finally {
       loading.value = false
@@ -139,7 +205,10 @@ export function useGalleryImages(galleryId: Ref<number>) {
     bulkAddImages,
     removeImage,
     reorderImages,
+    addCaption,
     updateCaption,
+    deleteCaption,
+    getCaptions,
     transferImages,
   }
 }

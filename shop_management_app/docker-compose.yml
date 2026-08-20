@@ -74,3 +74,17 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+
+  caption-cleanup:
+    image: postgres:17
+    command: >
+      sh -c "
+        apk add --no-cache curl
+        while true; do
+          curl -sf -X POST http://app:3000/api/captions/cleanup || true
+          sleep 86400
+        done
+      "
+    depends_on:
+      - app
+    restart: unless-stopped

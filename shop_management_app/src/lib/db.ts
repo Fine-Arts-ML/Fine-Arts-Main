@@ -4,6 +4,7 @@ import { Pool } from 'pg'
 import * as mainSchema from './schema'
 import * as authSchema from './auth-schema'
 import * as nextcloudSchema from './nextcloud-schema'
+import * as gallerySchema from './gallery-schema'
 
 let pool: Pool | null = null
 
@@ -23,7 +24,7 @@ export function getDb() {
       password: dbPassword,
     })
   }
-  return drizzle(pool, { schema: { ...mainSchema, ...authSchema, ...nextcloudSchema } })
+  return drizzle(pool, { schema: { ...mainSchema, ...authSchema, ...nextcloudSchema, ...gallerySchema } })
 }
 
 export const db = getDb()

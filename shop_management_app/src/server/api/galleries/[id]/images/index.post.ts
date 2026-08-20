@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
     }
 
     const body = await readBody(event)
-    const { fileIds, caption } = body
+    const { fileIds } = body
 
     if (!Array.isArray(fileIds) || fileIds.length === 0) {
       throw createError({ statusCode: 400, statusMessage: 'fileIds array is required and cannot be empty' })
@@ -43,8 +43,8 @@ export default defineEventHandler(async (event) => {
     }
 
     // Get max display order for this gallery
-    const maxOrderResult = await db.select({ 
-      max: drizzleMax(galleryImages.displayOrder) 
+    const maxOrderResult = await db.select({
+      max: drizzleMax(galleryImages.displayOrder)
     })
       .from(galleryImages)
       .where(eq(galleryImages.galleryId, galleryId))
@@ -82,7 +82,6 @@ export default defineEventHandler(async (event) => {
           galleryId,
           fileId: fileIdNum,
           displayOrder: maxOrder + i + 1,
-          caption: caption || null,
           addedById: user.id,
         })
         .returning()
@@ -97,7 +96,7 @@ export default defineEventHandler(async (event) => {
       galleryId: img.galleryId,
       fileId: img.fileId,
       displayOrder: img.displayOrder,
-      caption: img.caption,
+      captions: [],
       addedById: img.addedById,
       addedAt: img.addedAt.toISOString(),
     }))

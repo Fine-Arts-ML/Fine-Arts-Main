@@ -1,4 +1,4 @@
-// Update image caption or order in gallery
+// Update image order in gallery (caption management moved to /api/galleries/[galleryId]/images/[imageId]/captions)
 import { db } from '~/lib/db'
 import { galleryImages, galleries } from '~/lib/gallery-schema'
 import { eq, and } from 'drizzle-orm'
@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
     }
 
     const body = await readBody(event)
-    const { caption, displayOrder } = body
+    const { displayOrder } = body
 
     // Check gallery ownership
     const galleryResult = await db.select()
@@ -39,7 +39,6 @@ export default defineEventHandler(async (event) => {
     }
 
     const updateData: Record<string, any> = {}
-    if (caption !== undefined) updateData.caption = caption
     if (displayOrder !== undefined) updateData.displayOrder = displayOrder
 
     if (Object.keys(updateData).length === 0) {
@@ -63,7 +62,7 @@ export default defineEventHandler(async (event) => {
       galleryId: updated[0].galleryId,
       fileId: updated[0].fileId,
       displayOrder: updated[0].displayOrder,
-      caption: updated[0].caption,
+      captions: [],
       addedById: updated[0].addedById,
       addedAt: updated[0].addedAt.toISOString(),
     }

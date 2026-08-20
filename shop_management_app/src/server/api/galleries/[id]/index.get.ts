@@ -1,6 +1,6 @@
 // Get gallery details with images and access list
 import { db } from '~/lib/db'
-import { galleries, galleryImages, galleryAccess } from '~/lib/gallery-schema'
+import { galleries, galleryImages, galleryAccess, galleryImageCaptions, captions } from '~/lib/gallery-schema'
 import { ocFilecache } from '~/lib/nextcloud-schema'
 import { eq, and, asc } from 'drizzle-orm'
 import { Pool } from 'pg'
@@ -55,7 +55,6 @@ export default defineEventHandler(async (event) => {
       galleryId: galleryImages.galleryId,
       fileId: galleryImages.fileId,
       displayOrder: galleryImages.displayOrder,
-      caption: galleryImages.caption,
       addedById: galleryImages.addedById,
       addedAt: galleryImages.addedAt,
       fileName: ocFilecache.name,
@@ -66,13 +65,13 @@ export default defineEventHandler(async (event) => {
       .where(eq(galleryImages.galleryId, galleryId))
       .orderBy(asc(galleryImages.displayOrder))
 
-    // Build result array with descriptions
+    // Build result array - captions fetched separately
     const imagesResult = imagesWithFiles.map(img => ({
       id: img.id,
       galleryId: img.galleryId,
       fileId: img.fileId,
       displayOrder: img.displayOrder,
-      caption: img.caption,
+      captions: [] as Array<{ captionId: number; galleryImageId: number; caption: string; createdById: number; createdAt: string; isMain: boolean }>,
       addedById: img.addedById,
       addedAt: img.addedAt.toISOString(),
       fileName: img.fileName,
@@ -80,6 +79,37 @@ export default defineEventHandler(async (event) => {
       previewUrl: img.path,
       description: null as string | null,
     }))
+
+    // Fetch all captions for images in this gallery
+    if (imagesResult.length > 0) {
+      const allCaptions = await db.select({
+        captionId: captions.captionId,
+        galleryImageId: galleryImageCaptions.galleryImageId,
+        caption: captions.caption,
+        createdById: galleryImageCaptions.createdById,
+        createdAt: galleryImageCaptions.createdAt,
+        isMain: galleryImageCaptions.isMain,
+      })
+        .from(galleryImageCaptions)
+        .innerJoin(captions, eq(galleryImageCaptions.captionId, captions.captionId))
+        .innerJoin(galleryImages, eq(galleryImageCaptions.galleryImageId, galleryImages.id))
+        .where(eq(galleryImages.galleryId, galleryId))
+        .orderBy(asc(galleryImageCaptions.captionId))
+
+      // Attach captions to images
+      for (const img of imagesResult) {
+        img.captions = allCaptions
+          .filter(c => c.galleryImageId === img.id)
+          .map(c => ({
+            captionId: c.captionId,
+            galleryImageId: c.galleryImageId,
+            caption: c.caption,
+            createdById: c.createdById,
+            createdAt: c.createdAt.toISOString(),
+            isMain: c.isMain,
+          }))
+      }
+    }
 
     // Hybrid approach: Fetch descriptions for all files in this gallery in a single query
     if (imagesResult.length > 0) {

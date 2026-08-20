@@ -23,25 +23,41 @@ export interface GalleryUpdate {
   isActive?: boolean
 }
 
+export interface GalleryImageCaption {
+  captionId: number
+  galleryImageId: number
+  caption: string
+  isMain: boolean
+  createdById: number
+  createdAt: string | Date
+  updatedAt: string | Date
+}
+
+export interface NewGalleryImageCaption {
+  galleryImageId: number
+  caption: string
+  createdById: number
+}
+
 export interface GalleryImage {
   id: number
   galleryId: number
   fileId: number  // bigint from oc_filecache.fileid
   displayOrder: number
-  caption: string | null
+  captions: GalleryImageCaption[]
   addedById: number
   addedAt: string | Date
   // Joined data from oc_filecache
   fileName?: string
   path?: string
   previewUrl?: string
+  description: string | null
 }
 
 export interface NewGalleryImage {
   galleryId: number
   fileId: number
   displayOrder?: number
-  caption?: string
   addedById: number
 }
 
