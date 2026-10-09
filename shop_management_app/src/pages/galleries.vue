@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   useGalleries,
@@ -8,6 +8,7 @@ import {
   type GalleryImage,
   type GalleryAccessEntry,
 } from '~/composables/useGalleries'
+import { useGalleryLayout } from '~/composables/useGalleryLayout'
 import {
   Plus,
   Search,
@@ -20,6 +21,7 @@ import {
   ChevronRight,
   Loader2,
   FolderOpen,
+  LayoutGrid,
 } from 'lucide-vue-next'
 import Button from '~/components/ui/Button.vue'
 import Input from '~/components/ui/Input.vue'
@@ -89,6 +91,15 @@ const selectedCaptionImage = ref<{
   fileName: string
   captions: any[]
 } | null>(null)
+
+// Column layout control (1-6 columns)
+const { columns: columnCount, setColumns: setColumnCount } = useGalleryLayout(3)
+
+// Handle slider input
+function handleColumnInputChange(event: Event) {
+  const target = event.target as HTMLInputElement
+  setColumnCount(parseInt(target.value, 10))
+}
 
 // Load galleries on mount
 onMounted(async () => {
@@ -381,7 +392,7 @@ function closeAccessManagement() {
           </div>
         </div>
 
-        <div v-else class="max-w-4xl mx-auto">
+        <div v-else class="max-w-none mx-auto">
           <!-- Gallery Header -->
           <div class="flex items-center justify-between mb-6">
             <div>
@@ -393,7 +404,20 @@ function closeAccessManagement() {
                 Last edited {{ formatDate(selectedGallery.updatedAt) }}
               </p>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-3">
+              <!-- Column Count Slider -->
+              <div class="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted/50">
+                <LayoutGrid class="w-4 h-4 text-muted-foreground" />
+                <input
+                  type="range"
+                  min="1"
+                  max="6"
+                  :value="columnCount"
+                  @input="handleColumnInputChange"
+                  class="w-24 accent-primary"
+                />
+                <span class="text-sm font-medium w-5 text-right">{{ columnCount }}</span>
+              </div>
               <Button variant="outline" @click="togglePreview">
                 <Eye class="w-4 h-4 mr-2" />
                 Preview as Guest
@@ -421,17 +445,18 @@ function closeAccessManagement() {
             </Button>
           </div>
 
-          <!-- Gallery Images Grid (CSS Columns for masonry layout) -->
-          <div v-if="selectedGalleryDetail?.images?.length" class="columns-4 gap-4 space-y-4">
-            <div
-              v-for="image in selectedGalleryDetail.images"
-              :key="image.id"
-              class="relative group rounded-lg overflow-hidden bg-muted/30 border flex flex-col break-inside-avoid transition-all"
-            >
-              <!-- Image Container -->
-              <div class="relative aspect-square">
-                <img
-                  :src="getPreviewUrl(image.fileId, 300)"
+          <!-- Gallery Images Grid (Dynamic Columns) -->
+          <div v-if="selectedGalleryDetail?.images?.length">
+            <div :style="{ gridTemplateColumns: `repeat(${columnCount}, 1fr)` }" class="grid gap-4">
+              <div
+                v-for="image in selectedGalleryDetail.images"
+                :key="image.id"
+                class="relative group rounded-lg overflow-hidden bg-muted/30 border flex flex-col transition-all"
+              >
+                <!-- Image Container -->
+                <div class="relative" :style="{ aspectRatio: columnCount <= 2 ? '4/3' : '1/1' }">
+                  <img
+                    :src="getPreviewUrl(image.fileId, columnCount <= 2 ? 800 : 512)"
                   :alt="image.fileName || ''"
                   class="w-full h-full object-cover"
                 />
@@ -486,6 +511,7 @@ function closeAccessManagement() {
                   </button>
                 </div>
               </div>
+            </div>
             </div>
           </div>
 

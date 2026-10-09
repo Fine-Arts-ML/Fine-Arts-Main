@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuth } from '~/composables/useAuth'
+import { useGalleryLayout } from '~/composables/useGalleryLayout'
 import {
   ChevronLeft,
   ChevronRight,
@@ -9,10 +10,14 @@ import {
   Image as ImageIcon,
   Loader2,
   ArrowLeft,
+  LayoutGrid,
 } from 'lucide-vue-next'
 
 // Auth
 const { isGuest } = useAuth()
+
+// Column layout control (1-6 columns)
+const { columns: columnCount, setColumns: setColumnCount } = useGalleryLayout(3)
 
 // Route param
 const route = useRoute()
@@ -77,6 +82,12 @@ function openLargePreview() {
 // Close large preview
 function closeLargePreview() {
   showLargePreview.value = false
+}
+
+// Handle slider input
+function handleColumnInputChange(event: Event) {
+  const target = event.target as HTMLInputElement
+  setColumnCount(parseInt(target.value, 10))
 }
 
 // Keyboard navigation
@@ -165,6 +176,20 @@ function getImageMainCaption(captions: any[]): string | null {
               </p>
             </div>
           </div>
+          
+          <!-- Column Count Slider -->
+          <div class="flex items-center gap-3">
+            <LayoutGrid class="w-4 h-4 text-muted-foreground" />
+            <input
+              type="range"
+              min="1"
+              max="6"
+              :value="columnCount"
+              @input="handleColumnInputChange"
+              class="w-28 accent-primary"
+            />
+            <span class="text-sm font-medium w-5 text-right">{{ columnCount }}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -188,9 +213,9 @@ function getImageMainCaption(captions: any[]): string | null {
         <p class="text-sm mt-1">This gallery is empty.</p>
       </div>
 
-      <!-- Card Grid View -->
-      <div v-else class="max-w-6xl mx-auto">
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <!-- Card Grid View (Dynamic Columns) -->
+      <div v-else class="w-full max-w-none">
+        <div :style="{ gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }" class="grid gap-6">
           <div
             v-for="(image, index) in images"
             :key="image.id"
@@ -262,14 +287,14 @@ function getImageMainCaption(captions: any[]): string | null {
             </div>
 
             <!-- Main Image and Info Container -->
-            <div class="relative flex-1 flex flex-col items-center w-full max-h-[85vh] overflow-y-auto">
+            <div class="relative flex-1 flex flex-col items-center w-full max-h-[90vh] overflow-y-auto">
               <!-- Main Image -->
               <div class="relative w-full flex items-center justify-center">
                 <img
                   v-if="currentImage"
                   :src="getLargePreviewUrl(currentImage.fileId)"
                   :alt="currentImage.captions?.[0]?.caption || currentImage.fileName || ''"
-                  class="max-w-full max-h-[60vh] object-contain rounded-lg"
+                  class="max-w-full max-h-[80vh] object-contain rounded-lg cursor-zoom-in"
                   @click="openLargePreview"
                 />
               </div>

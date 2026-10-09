@@ -4,6 +4,7 @@ import {
   Search, X, Plus, Image as ImageIcon, Loader2, Pencil,
   ChevronRight, Folder, FolderOpen,
   ArrowUp, ArrowDown, ArrowLeftRight,
+  LayoutGrid,
 } from 'lucide-vue-next'
 import Button from '../ui/Button.vue'
 import Input from '../ui/Input.vue'
@@ -11,6 +12,7 @@ import ImagePreviewModal from '../ImagePreviewModal.vue'
 import FileBrowserTree, { type AccessibleFolder } from '../FileBrowserTree.vue'
 import CaptionSelectorPanel from './CaptionSelectorPanel.vue'
 import { useImagePreview } from '~/composables/useImagePreview'
+import { useGalleryLayout } from '~/composables/useGalleryLayout'
 import type { GalleryImage, GalleryImageCaption } from '~/composables/useGalleries'
 
 interface Props {
@@ -56,6 +58,15 @@ function handleCaptionsUpdate(captions: GalleryImageCaption[]) {
 
 // View mode: 'tree' or 'cards'
 const viewMode = ref<'tree' | 'cards'>('tree')
+
+// Column layout control for card view (1-6 columns)
+const { columns: columnCount, setColumns: setColumnCount } = useGalleryLayout(4)
+
+// Handle slider input
+function handleColumnInputChange(event: Event) {
+  const target = event.target as HTMLInputElement
+  setColumnCount(parseInt(target.value, 10))
+}
 
 // Search
 const searchQuery = ref('')
@@ -387,6 +398,20 @@ function handleClose() {
         </button>
       </div>
 
+      <!-- Column Count Slider (only visible in cards mode) -->
+      <div v-if="viewMode === 'cards'" class="flex items-center gap-2 px-3 py-1.5 rounded-md bg-muted/50">
+        <LayoutGrid class="w-4 h-4 text-muted-foreground" />
+        <input
+          type="range"
+          min="1"
+          max="6"
+          :value="columnCount"
+          @input="handleColumnInputChange"
+          class="w-24 accent-primary"
+        />
+        <span class="text-sm font-medium w-5 text-right">{{ columnCount }}</span>
+      </div>
+
       <!-- Search -->
       <div class="flex-1 relative">
         <Search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -427,12 +452,12 @@ function handleClose() {
             />
           </div>
 
-          <!-- Card View -->
-          <div v-else class="grid grid-cols-4 gap-2">
+          <!-- Card View (Dynamic Columns) -->
+          <div v-else :style="{ gridTemplateColumns: `repeat(${columnCount}, 1fr)` }" class="grid gap-3">
             <div
               v-for="image in cardImages"
               :key="image.fileId"
-              class="relative group aspect-square rounded-md overflow-hidden bg-muted/30 border cursor-pointer"
+              class="relative group rounded-md overflow-hidden bg-muted/30 border cursor-pointer"
               :class="cardSelectedFiles.has(image.fileId) ? 'ring-2 ring-primary' : ''"
               draggable="true"
               @click="cardSelectedFiles.has(image.fileId) ? cardSelectedFiles.delete(image.fileId) : cardSelectedFiles.add(image.fileId)"
@@ -441,7 +466,7 @@ function handleClose() {
               @dragend="draggedFileId = null"
             >
               <img
-                :src="getPreviewUrl(image.fileId, 128)"
+                :src="getPreviewUrl(image.fileId, 256)"
                 :alt="image.fileName"
                 class="w-full h-full object-cover pointer-events-none"
               />
@@ -529,12 +554,12 @@ function handleClose() {
                 </button>
               </div>
 
-              <!-- Thumbnail with caption editor button -->
+              <!-- Thumbnail with caption editor button (larger) -->
               <div class="relative">
                 <img
-                  :src="getPreviewUrl(image.fileId, 64)"
+                  :src="getPreviewUrl(image.fileId, 256)"
                   :alt="image.captions?.[0]?.caption || image.fileName || ''"
-                  class="w-12 h-12 rounded object-cover cursor-pointer"
+                  class="w-20 h-20 rounded object-cover cursor-pointer"
                   @click="showPreview(image.fileId, image.fileName || '')"
                 />
                 <button
