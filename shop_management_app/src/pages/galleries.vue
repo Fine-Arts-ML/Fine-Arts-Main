@@ -220,6 +220,21 @@ function getImageMainCaption(captions: any[]): string | null {
   return main?.caption || (captions[0]?.caption || null)
 }
 
+// Check if a caption is the main caption
+function isMainCaption(caption: any): boolean {
+  return caption?.isMain === true
+}
+
+// Sort captions with main caption first
+function getSortedCaptions(captions: any[]): any[] {
+  if (!captions?.length) return []
+  return [...captions].sort((a, b) => {
+    if (a.isMain && !b.isMain) return -1
+    if (!a.isMain && b.isMain) return 1
+    return 0
+  })
+}
+
 // Image assignment panel handlers
 function openImageAssignment() {
   if (selectedGalleryDetail.value) {
@@ -429,9 +444,19 @@ function closeAccessManagement() {
                     <Trash2 class="w-3 h-3" />
                   </Button>
                 </div>
-                <!-- Caption overlay (existing, keep for reference) -->
-                <div v-if="getImageMainCaption(image.captions)" class="absolute bottom-0 left-0 right-0 p-2 bg-black/60 text-white text-xs truncate">
-                  {{ getImageMainCaption(image.captions) }}
+                <!-- Caption overlay - show all captions with main caption highlighted -->
+                <div v-if="image.captions?.length" class="absolute bottom-0 left-0 right-0 p-2 bg-black/60 text-white text-xs">
+                  <div class="flex flex-wrap gap-1">
+                    <span
+                      v-for="caption in getSortedCaptions(image.captions)"
+                      :key="caption.captionId"
+                      :class="isMainCaption(caption) ? 'font-bold text-yellow-400' : 'text-white/80'"
+                      class="truncate block"
+                      :title="isMainCaption(caption) ? 'Main caption: ' + caption.caption : caption.caption"
+                    >
+                      {{ caption.caption }}
+                    </span>
+                  </div>
                 </div>
               </div>
               
@@ -594,4 +619,9 @@ function closeAccessManagement() {
 
 <style scoped>
 /* Global styles for shadcn components */
+
+/* Caption overlay styling */
+:deep(.absolute.bottom-0.left-0.right-0) {
+  background: rgba(0, 0, 0, 0.6);
+}
 </style>

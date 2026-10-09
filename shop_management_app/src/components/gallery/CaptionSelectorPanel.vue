@@ -376,7 +376,7 @@ loadFileCaptions()
                       })"
                       @click="addToSelection(cap.captionId, cap.caption, 'gallery', gallery.galleryName)"
                     >
-                      <span v-if="cap.isMain" class="inline">⭐ </span>
+                      <span v-if="cap.isMain" class="inline font-bold text-yellow-400">[MAIN] </span>
                       {{ cap.caption }}
                     </button>
                   </div>

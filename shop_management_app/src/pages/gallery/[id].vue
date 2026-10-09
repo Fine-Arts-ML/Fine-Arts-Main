@@ -136,6 +136,13 @@ function formatDate(dateStr: string): string {
   return date.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
 }
 
+// Get main caption (isMain: true) for an image, fallback to first caption
+function getImageMainCaption(captions: any[]): string | null {
+  if (!captions?.length) return null
+  const main = captions.find((c: any) => c.isMain)
+  return main?.caption || (captions[0]?.caption || null)
+}
+
 </script>
 
 <template>
@@ -193,16 +200,14 @@ function formatDate(dateStr: string): string {
             <div class="aspect-square overflow-hidden flex-shrink-0">
               <img
                 :src="getPreviewUrl(image.fileId, 512)"
-                :alt="image.captions?.[0]?.caption || image.fileName || ''"
+                :alt="image.captions?.[0]?.caption"
                 class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
               />
             </div>
             <div class="p-4 flex flex-col flex-1">
-              <h3 v-if="image.fileName" class="font-medium truncate text-sm">
-                {{ image.fileName }}
-              </h3>
-              <p v-if="image.captions?.length" class="text-sm text-muted-foreground mt-1">
-                {{ image.captions.map((c: any) => c.caption).join(' | ') }}
+
+              <p v-if="getImageMainCaption(image.captions)" class="text-sm text-muted-foreground mt-1">
+                {{ getImageMainCaption(image.captions) }}
               </p>
               <p v-else-if="image.description" class="text-sm text-muted-foreground mt-1">
                 "{{ image.description }}"
@@ -273,11 +278,8 @@ function formatDate(dateStr: string): string {
               <div v-if="currentImage" class="w-full mt-4 bg-white/10 backdrop-blur-sm rounded-xl p-4">
                 <!-- Image Info -->
                 <div class="text-center">
-                  <h3 v-if="currentImage.fileName" class="font-medium text-white">
-                    {{ currentImage.fileName }}
-                  </h3>
-                  <p v-if="currentImage.captions?.length" class="text-sm text-white/80 mt-2">
-                    {{ currentImage.captions.map((c: any) => c.caption).join(' | ') }}
+                  <p v-if="getImageMainCaption(currentImage.captions)" class="text-sm text-white/80 mt-2">
+                    {{ getImageMainCaption(currentImage.captions) }}
                   </p>
                   <p v-else-if="currentImage.description" class="text-sm text-white/80 mt-2">
                     "{{ currentImage.description }}"
@@ -331,8 +333,8 @@ function formatDate(dateStr: string): string {
             
             <div v-if="currentImage" class="mt-4 text-center text-white max-w-2xl">
               <h3 class="font-medium">{{ currentImage.fileName }}</h3>
-              <p v-if="currentImage.captions?.length" class="text-sm text-white/80 mt-1">
-                {{ currentImage.captions.map((c: any) => c.caption).join(' | ') }}
+              <p v-if="getImageMainCaption(currentImage.captions)" class="text-sm text-white/80 mt-1">
+                {{ getImageMainCaption(currentImage.captions) }}
               </p>
               <p v-else-if="currentImage.description" class="text-sm text-white/80 mt-1">
                 "{{ currentImage.description }}"
